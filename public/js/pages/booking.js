@@ -213,6 +213,33 @@ window.Booking = (() => {
             coupon: bk.coupon, notes: bk.notes || '', problemPhoto: photo || null,
             walletUsed: bk.payMethod === 'wallet' ? Math.min(Store.state.wallet, total()) : 0,
           });
+          const token = localStorage.getItem('sh:token');
+          if (token) {
+            const apiBase = window.SH_API || window.SERVEHUB_API || 'http://localhost:4000/api';
+            fetch(apiBase + '/bookings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+              body: JSON.stringify({
+                id: b.id,
+                serviceId: s.id,
+                packageName: P.name,
+                date: fmtDate(b.date),
+                time: b.time,
+                address: b.address,
+                proId: pro.id ? Number(String(pro.id).replace(/\D/g, '')) || null : null,
+                paymentMethod: bk.payMethod || 'wallet',
+                coupon: bk.coupon || null,
+                notes: bk.notes || '',
+                latitude: b.latitude,
+                longitude: b.longitude,
+                formattedAddress: b.formattedAddress,
+                city: b.city,
+                state: b.state,
+                pincode: b.pincode,
+                country: b.country,
+              })
+            }).catch(() => {});
+          }
           Store.clearSelectedPhoto();
           if (bk.payMethod === 'wallet') { const used = Math.min(Store.state.wallet, total()); Store.walletTx(-used, 'booking ' + b.id); }
           Store.sendMsg(b.id, `Hi! This is ${pro.name} from Servehub. Your ${s.name} booking for ${fmtDate(b.date)} at ${b.time} is confirmed. See you soon! 👋`, 'them');
@@ -464,7 +491,15 @@ window.Booking = (() => {
             Store.persist();
             bk.addr = newAddr.id;
             bk.locationDetails = locDetails;
+            bk.step = 3;
             saveBk();
+            const stepEl = U.$('#bk-step', root);
+            if (stepEl) {
+              stepEl.innerHTML = stepBodyHtml(bk.step);
+              wireStep(root);
+            }
+            if (window.toast) toast('📍 Location confirmed! Proceeding to professional selection.', 'success');
+            window.scrollTo({ top: 120, behavior: 'smooth' });
           },
           onLocationChanged: (locDetails) => {
             if (!locDetails) return;

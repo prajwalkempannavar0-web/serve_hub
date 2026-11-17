@@ -43,6 +43,17 @@ window.Customer = (() => {
         const r = await api('GET', '/tickets');
         if (r && r.tickets) { Store.state.tickets = r.tickets.map(normTicket); Store.persist(); live.tickets = true; return true; }
       }
+      if ((tab === 'bookings' || tab === 'overview') && !live.bookings) {
+        const r = await api('GET', '/bookings');
+        if (r && r.bookings && Array.isArray(r.bookings)) {
+          const map = new Map(r.bookings.map(b => [b.id, b]));
+          Store.state.bookings.forEach(b => { if (!map.has(b.id)) map.set(b.id, b); });
+          Store.state.bookings = Array.from(map.values());
+          Store.persist();
+          live.bookings = true;
+          return true;
+        }
+      }
     } catch (e) { /* keep demo data */ }
     return false;
   };

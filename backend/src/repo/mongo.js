@@ -116,6 +116,16 @@ module.exports = {
     return clean(await M.User.findOne({ id }).lean());
   },
   async listUsers() { return (await M.User.find().sort({ id: -1 }).lean()).map(clean); },
+  async updateUser(id, patch) {
+    const set = {};
+    for (const [k, v] of Object.entries(patch)) {
+      if (k !== 'passwordHash' && k !== 'password_hash') {
+        set[camel(k)] = v;
+      }
+    }
+    await M.User.updateOne({ id: Number(id) }, { $set: set });
+    return clean(await M.User.findOne({ id: Number(id) }).lean());
+  },
   async addPoints(userId, pts) { await M.User.updateOne({ id: userId }, { $inc: { rewardPoints: pts } }); },
   async addWallet(userId, amt) { await M.User.updateOne({ id: userId }, { $inc: { walletBalance: amt } }); },
   async updateUserPassword(email, passwordHash) {
@@ -177,6 +187,14 @@ module.exports = {
     await M.Professional.updateOne({ id }, { $set: { status, verified: status === 'active' } });
     return clean(await M.Professional.findOne({ id }).lean());
   },
+  async updatePro(id, patch) {
+    const set = {};
+    for (const [k, v] of Object.entries(patch)) set[camel(k)] = v;
+    if (set.status === 'active') set.verified = true;
+    else if (set.status === 'rejected' || set.status === 'suspended' || set.status === 'inactive') set.verified = false;
+    await M.Professional.updateOne({ id: Number(id) }, { $set: set });
+    return clean(await M.Professional.findOne({ id: Number(id) }).lean());
+  },
   async listPendingPros() { return (await M.Professional.find({ status: 'pending' }).sort({ id: -1 }).lean()).map(clean); },
   async incrementProBookings(id) { await M.Professional.updateOne({ id }, { $inc: { bookingsCount: 1 } }); },
 
@@ -187,6 +205,39 @@ module.exports = {
   async listServices(category) {
     const q = category ? { category } : {};
     return (await M.Service.find(q).sort({ bookingsCount: -1 }).lean()).map(clean);
+  },
+  async listAllServices() {
+    return (await M.Service.find().sort({ bookingsCount: -1 }).lean()).map(clean);
+  },
+  async createService(o) {
+    const id = o.id || ('s' + Date.now());
+    const doc = await M.Service.create({
+      id,
+      name: o.name || 'New Service',
+      category: o.category || 'Other',
+      priceFrom: Number(o.priceFrom || o.price || 0),
+      duration: o.duration || '1 hr',
+      rating: Number(o.rating) || 4.8,
+      bookingsCount: 0,
+      image: o.image || '✨',
+      included: Array.isArray(o.included) ? o.included : (o.included ? String(o.included).split(',').map(x => x.trim()).filter(Boolean) : []),
+      description: o.description || '',
+      active: o.active !== false,
+    });
+    return clean(doc);
+  },
+  async updateService(id, patch) {
+    const set = {};
+    for (const [k, v] of Object.entries(patch)) set[camel(k)] = v;
+    if ('price' in set && !('priceFrom' in set)) set.priceFrom = Number(set.price);
+    if ('priceFrom' in set) set.priceFrom = Number(set.priceFrom);
+    if (typeof set.included === 'string') set.included = set.included.split(',').map(x => x.trim()).filter(Boolean);
+    await M.Service.updateOne({ id }, { $set: set });
+    return clean(await M.Service.findOne({ id }).lean());
+  },
+  async deleteService(id) {
+    await M.Service.updateOne({ id }, { $set: { active: false } });
+    return true;
   },
   async findServiceById(id) { return clean(await M.Service.findOne({ id }).lean()); },
   async findCoupon(code) {
@@ -349,6 +400,7 @@ module.exports = {
   },
   async findBookingById(id) { return clean(await M.Booking.findOne({ id }).lean()); },
   async listBookingsByUser(userId) { return (await M.Booking.find({ userId }).sort({ createdAt: -1 }).lean()).map(clean); },
+  async listBookingsByPro(proId) { return (await M.Booking.find({ proId: Number(proId) }).sort({ createdAt: -1 }).lean()).map(clean); },
   async listBookings() { return (await M.Booking.find().sort({ createdAt: -1 }).lean()).map(clean); },
   async updateBooking(id, patch) {
     const set = {};
@@ -368,18 +420,28 @@ module.exports = {
 
   /* ---------- analytics ---------- */
   async dashboardStats() {
-    const [totalBookings, revenue, activeBookings, customers, professionals, avgRating] = await Promise.all([
+    const [
+      totalBookings, revenue, activeBookings,
+      pendingBookings, confirmedBookings, inProgressBookings, completedBookings, cancelledBookings,
+      customers, professionals, avgRating
+    ] = await Promise.all([
       M.Booking.countDocuments(),
       this.sumRevenue(),
       M.Booking.countDocuments({ status: { $nin: ['cancelled', 'rejected', 'rated', 'completed'] } }),
+      M.Booking.countDocuments({ status: 'pending' }),
+      M.Booking.countDocuments({ status: 'confirmed' }),
+      M.Booking.countDocuments({ status: { $in: ['assigned', 'arriving', 'started'] } }),
+      M.Booking.countDocuments({ status: { $in: ['completed', 'paid', 'rated'] } }),
+      M.Booking.countDocuments({ status: { $in: ['cancelled', 'rejected'] } }),
       this.countUsers('customer'),
       M.Professional.countDocuments(),
       M.Booking.aggregate([{ $group: { _id: null, avg: { $avg: '$rating' } } }]),
     ]);
     return {
       totalBookings, revenue, customers, professionals, activeBookings,
+      pendingBookings, confirmedBookings, inProgressBookings, completedBookings, cancelledBookings,
       avgRating: (avgRating[0] && avgRating[0].avg != null ? avgRating[0].avg : 0).toFixed(1),
-      recentBookings: (await M.Booking.find().sort({ createdAt: -1 }).limit(8).lean()).map(clean),
+      recentBookings: (await M.Booking.find().sort({ createdAt: -1 }).limit(10).lean()).map(clean),
     };
   },
 };

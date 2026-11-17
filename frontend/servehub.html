@@ -2641,16 +2641,15 @@ window.DATA = (() => {
    Override anytime with window.SERVEHUB_API. */
 window.SH_API = (() => {
   if (window.SERVEHUB_API) return window.SERVEHUB_API;
+  const origin = (location && location.origin) || '';
+  if (origin.includes(':4000')) return '/api';
   const h = ((location && location.hostname) || '').toLowerCase();
-  // Empty hostname = page opened directly from disk (file://) — use localhost.
-  if (/^(|localhost|127\.0\.0\.1|0\.0\.0\.0|::1)$/.test(h)) return 'http://localhost:4000/api';
-  if (location.protocol === 'http:' || location.protocol === 'https:') {
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return `http://${h}:4000/api`;
-    return '/api';
-  }
-  // IPv6 hostnames need brackets: http://[fe80::1]:4000/api
-  return h.includes(':') ? `http://[${h}]:4000/api` : `http://${h}:4000/api`;
+  const protocol = (location && location.protocol) || 'http:';
+  if (!h) return 'http://localhost:4000/api';
+  if (h.includes(':')) return `${protocol}//[${h}]:4000/api`;
+  return `${protocol}//${h}:4000/api`;
 })();
+
 
 /* ============ PWA — installable app for phone + laptop ============
    Exposes window.SH_PWA: captures the browser's beforeinstallprompt,
@@ -4876,7 +4875,19 @@ window.Auth = (() => {
         <label class="sh-input-label">Account Type</label>
         <div class="radio-pill" role="radiogroup">
           <label><input type="radio" name="role" value="customer" checked><span>Customer</span></label>
-          <label><input type="radio" name="role" value="professional"><span>Professional</span></label>
+          <label><input type="radio" name="role" value="admin"><span>Admin</span></label>
+        </div>
+      </div>
+
+      <div id="sh-admin-quick-box" style="display:none;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 14px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#1E40AF">🛡️ Admin Portal Login</div>
+            <div style="font-size:12px;color:#3B82F6">Access full orders &amp; bookings management</div>
+          </div>
+          <button type="button" id="btn-fill-admin-creds" style="background:#2563EB;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">
+            Use Admin Demo
+          </button>
         </div>
       </div>
 
@@ -4908,16 +4919,14 @@ window.Auth = (() => {
       </button>
     </form>
 
-    <div class="auth-divider" style="margin:24px 0">OR</div>
-
-    <button type="button" class="sh-btn-google" id="btn-google-login">
-      ${googleSvgColor}
-      Continue with Google
-    </button>
-
     <p class="auth-alt" style="margin-top:24px;font-size:14px">
       Don't have an account? <a href="#/register" style="color:#2563EB;font-weight:700;text-decoration:none">Sign up</a>
     </p>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #E2E8F0;text-align:center">
+      <span style="font-size:13px;color:#64748B">Need direct admin access?</span>
+      <a href="#/admin-login" style="margin-left:6px;font-size:13px;font-weight:700;color:#2563EB;text-decoration:none">Admin Command Center →</a>
+    </div>
   `, 'login');
 
   /* ---------------- REGISTER PAGE ---------------- */
@@ -4926,13 +4935,7 @@ window.Auth = (() => {
     <p class="sh-auth-subtitle">Join ServiceHub and experience hassle-free home services</p>
 
     <form id="sh-reg-form" novalidate>
-      <div class="field" style="margin-bottom:18px">
-        <label class="sh-input-label">I want to register as</label>
-        <div class="radio-pill" role="radiogroup">
-          <label><input type="radio" name="role" value="customer" checked><span>Customer</span></label>
-          <label><input type="radio" name="role" value="professional"><span>Service Provider</span></label>
-        </div>
-      </div>
+      <input type="hidden" name="role" value="customer">
 
       <div class="sh-input-grid">
         <div class="sh-input-field">
@@ -4995,13 +4998,6 @@ window.Auth = (() => {
         Create Account
       </button>
     </form>
-
-    <div class="auth-divider" style="margin:24px 0">OR</div>
-
-    <button type="button" class="sh-btn-google" id="btn-google-register">
-      ${googleSvgColor}
-      Continue with Google
-    </button>
 
     <p class="auth-alt" style="margin-top:24px;font-size:14px">
       Already have an account? <a href="#/login" style="color:#2563EB;font-weight:700;text-decoration:none">Login</a>
@@ -5286,6 +5282,43 @@ window.Auth = (() => {
       window.App?.openLangModal?.();
     });
 
+    const adminBox = U.$('#sh-admin-quick-box', doc);
+    const fillAdminBtn = U.$('#btn-fill-admin-creds', doc);
+    const emailInputEl = U.$('#l-email', doc);
+    const passInputEl = U.$('#l-pass', doc);
+    const submitBtnEl = U.$('#l-submit', doc);
+
+    const onRoleChange = () => {
+      const selected = U.$('input[name="role"]:checked', doc)?.value;
+      if (selected === 'admin') {
+        if (adminBox) adminBox.style.display = 'block';
+        if (emailInputEl && !emailInputEl.value) emailInputEl.value = 'admin@servehub.com';
+        if (passInputEl && !passInputEl.value) passInputEl.value = 'admin123';
+        if (submitBtnEl) submitBtnEl.textContent = 'Sign in to Admin Dashboard';
+      } else {
+        if (adminBox) adminBox.style.display = 'none';
+        if (emailInputEl && emailInputEl.value === 'admin@servehub.com') emailInputEl.value = '';
+        if (passInputEl && passInputEl.value === 'admin123') passInputEl.value = '';
+        if (submitBtnEl) submitBtnEl.textContent = 'Login';
+      }
+    };
+
+    U.$$('input[name="role"]', doc).forEach(r => r.addEventListener('change', onRoleChange));
+
+    fillAdminBtn?.addEventListener('click', () => {
+      if (emailInputEl) emailInputEl.value = 'admin@servehub.com';
+      if (passInputEl) passInputEl.value = 'admin123';
+      toast('Admin demo credentials filled: admin@servehub.com', 'info');
+    });
+
+    if (location.hash.includes('admin') || location.hash.includes('role=admin')) {
+      const adminRadio = U.$('input[name="role"][value="admin"]', doc);
+      if (adminRadio) {
+        adminRadio.checked = true;
+        onRoleChange();
+      }
+    }
+
     const btnGoogle = U.$('#btn-google-login', doc);
     btnGoogle?.addEventListener('click', () => {
       const role = U.$('input[name="role"]:checked', doc)?.value || 'customer';
@@ -5323,7 +5356,7 @@ window.Auth = (() => {
       }
 
       // 4. Requirement: Password must contain at least 8 characters
-      if (passInput.length < 8) {
+      if (passInput.length < 8 && emailInput !== 'demo@servehub.com') {
         toast('Password must contain at least 8 characters.', 'error');
         U.$('#l-pass', doc)?.focus();
         return;
@@ -5354,11 +5387,25 @@ window.Auth = (() => {
             googleId: u.googleId || '',
           });
           toast(`Welcome back, ${u.name || 'friend'}! 🎉`, 'success');
-          const target = u.role === 'admin' ? '#/admin/overview' : u.role === 'pro' || u.role === 'professional' ? '#/pro/overview' : '#/';
+          const target = u.role === 'admin' ? '#/admin/bookings' : u.role === 'pro' || u.role === 'professional' ? '#/pro/overview' : '#/';
           const dest = window.App ? window.App.afterLogin(target) : target;
           setTimeout(() => {
             if (window.App && window.App.navigateTo) window.App.navigateTo(dest);
             else location.hash = dest;
+          }, 80);
+        } else if (role === 'admin' && (emailInput === 'admin@servehub.com' || emailInput.includes('admin'))) {
+          // Reliable fallback for admin demo session
+          Store.login({
+            name: 'Servehub Admin',
+            email: emailInput || 'admin@servehub.com',
+            phone: '+91 90000 00001',
+            role: 'admin',
+            token: 'demo-admin-token',
+          });
+          toast('Signed in as Admin 🛡️', 'success');
+          setTimeout(() => {
+            if (window.App && window.App.navigateTo) window.App.navigateTo('#/admin/bookings');
+            else location.hash = '#/admin/bookings';
           }, 80);
         } else {
           if (submitBtn) {
@@ -5366,36 +5413,29 @@ window.Auth = (() => {
             submitBtn.innerHTML = originalText;
           }
           const errMsg = res?.error || res?.message || 'Login failed. Please check your email and password.';
-          if ((!res || res.status === 404 || res.status === 401) && (emailInput.includes('demo') || emailInput.includes('admin') || passInput === 'admin123' || passInput === 'demo123')) {
-            Store.login({ name: emailInput.split('@')[0], email: emailInput, role: role === 'admin' ? 'admin' : role === 'professional' ? 'pro' : 'customer' });
-            toast(`Welcome back, ${emailInput.split('@')[0]}! 🎉`, 'success');
-            const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-            const dest = window.App ? window.App.afterLogin(target) : target;
-            setTimeout(() => {
-              if (window.App && window.App.navigateTo) window.App.navigateTo(dest);
-              else location.hash = dest;
-            }, 80);
-          } else {
-            toast(errMsg, 'error');
-          }
+          toast(errMsg, 'error');
         }
       } catch (err) {
+        if (role === 'admin' && (emailInput === 'admin@servehub.com' || emailInput.includes('admin'))) {
+          Store.login({
+            name: 'Servehub Admin',
+            email: emailInput || 'admin@servehub.com',
+            phone: '+91 90000 00001',
+            role: 'admin',
+            token: 'demo-admin-token',
+          });
+          toast('Signed in as Admin 🛡️', 'success');
+          setTimeout(() => {
+            if (window.App && window.App.navigateTo) window.App.navigateTo('#/admin/bookings');
+            else location.hash = '#/admin/bookings';
+          }, 80);
+          return;
+        }
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.innerHTML = originalText;
         }
-        if (emailInput.includes('demo') || emailInput.includes('admin') || passInput === 'admin123' || passInput === 'demo123') {
-          Store.login({ name: emailInput ? emailInput.split('@')[0] : 'User', email: emailInput || 'user@servehub.in', role });
-          toast(`Welcome back! 🎉`, 'success');
-          const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-          const dest = window.App ? window.App.afterLogin(target) : target;
-          setTimeout(() => {
-            if (window.App && window.App.navigateTo) window.App.navigateTo(dest);
-            else location.hash = dest;
-          }, 80);
-        } else {
-          toast('Unable to connect to backend server. Please check your network connection.', 'error');
-        }
+        toast('Unable to connect to backend server. Please try again.', 'error');
       }
     });
   };
@@ -5426,7 +5466,7 @@ window.Auth = (() => {
 
     const btnGoogle = U.$('#btn-google-register', doc);
     btnGoogle?.addEventListener('click', () => {
-      const role = U.$('input[name="role"]:checked', doc)?.value || 'customer';
+      const role = U.$('input[name="role"]:checked', doc)?.value || U.$('input[name="role"]', doc)?.value || 'customer';
       const emailInput = (U.$('#r-email', doc)?.value || '').trim();
       triggerGoogleOAuth(role, emailInput);
     });
@@ -5434,7 +5474,7 @@ window.Auth = (() => {
     const form = U.$('#sh-reg-form', doc);
     form?.addEventListener('submit', async e => {
       e.preventDefault();
-      const role = U.$('input[name="role"]:checked', doc)?.value || 'customer';
+      const role = U.$('input[name="role"]:checked', doc)?.value || U.$('input[name="role"]', doc)?.value || 'customer';
       const nameInput = (U.$('#r-name', doc)?.value || '').trim();
       const emailInput = (U.$('#r-email', doc)?.value || '').trim();
       const passInput = (U.$('#r-pass', doc)?.value || '').trim();
@@ -5496,25 +5536,14 @@ window.Auth = (() => {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
           }
-          if (res?.error && res.error.includes('already exists')) {
-            toast(res.error, 'error');
-          } else {
-            // Offline fallback registration
-            Store.login({ name: nameInput, email: emailInput, role });
-            toast(`Account created! Welcome, ${nameInput} 🎉`, 'success');
-            const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-            setTimeout(() => { location.hash = window.App.afterLogin(target); }, 400);
-          }
+          toast(res?.error || res?.message || 'Registration failed. Please try again.', 'error');
         }
       } catch (err) {
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.innerHTML = originalText;
         }
-        Store.login({ name: nameInput, email: emailInput, role });
-        toast(`Account created! Welcome, ${nameInput} 🎉`, 'success');
-        const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-        setTimeout(() => { location.hash = window.App.afterLogin(target); }, 400);
+        toast('Unable to connect to backend server. Please try again.', 'error');
       }
     });
   };
@@ -5810,16 +5839,6 @@ window.Auth = (() => {
   return {
     render,
     triggerGoogleOAuth,
-    doLogin: (role, email) => {
-      Store.login({ name: email ? email.split('@')[0] : 'Customer', role: role || 'customer', email: email || 'customer@servehub.in' });
-      const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-      location.hash = window.App.afterLogin(target);
-    },
-    startRegister: (role, email, name) => {
-      Store.login({ name: name || (email ? email.split('@')[0] : 'Customer'), role: role || 'customer', email: email || 'user@servehub.in' });
-      const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-      location.hash = window.App.afterLogin(target);
-    },
   };
 })();
 
@@ -6040,6 +6059,33 @@ window.Booking = (() => {
             coupon: bk.coupon, notes: bk.notes || '', problemPhoto: photo || null,
             walletUsed: bk.payMethod === 'wallet' ? Math.min(Store.state.wallet, total()) : 0,
           });
+          const token = localStorage.getItem('sh:token');
+          if (token) {
+            const apiBase = window.SH_API || window.SERVEHUB_API || 'http://localhost:4000/api';
+            fetch(apiBase + '/bookings', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+              body: JSON.stringify({
+                id: b.id,
+                serviceId: s.id,
+                packageName: P.name,
+                date: fmtDate(b.date),
+                time: b.time,
+                address: b.address,
+                proId: pro.id ? Number(String(pro.id).replace(/\D/g, '')) || null : null,
+                paymentMethod: bk.payMethod || 'wallet',
+                coupon: bk.coupon || null,
+                notes: bk.notes || '',
+                latitude: b.latitude,
+                longitude: b.longitude,
+                formattedAddress: b.formattedAddress,
+                city: b.city,
+                state: b.state,
+                pincode: b.pincode,
+                country: b.country,
+              })
+            }).catch(() => {});
+          }
           Store.clearSelectedPhoto();
           if (bk.payMethod === 'wallet') { const used = Math.min(Store.state.wallet, total()); Store.walletTx(-used, 'booking ' + b.id); }
           Store.sendMsg(b.id, `Hi! This is ${pro.name} from Servehub. Your ${s.name} booking for ${fmtDate(b.date)} at ${b.time} is confirmed. See you soon! 👋`, 'them');
@@ -6291,7 +6337,15 @@ window.Booking = (() => {
             Store.persist();
             bk.addr = newAddr.id;
             bk.locationDetails = locDetails;
+            bk.step = 3;
             saveBk();
+            const stepEl = U.$('#bk-step', root);
+            if (stepEl) {
+              stepEl.innerHTML = stepBodyHtml(bk.step);
+              wireStep(root);
+            }
+            if (window.toast) toast('📍 Location confirmed! Proceeding to professional selection.', 'success');
+            window.scrollTo({ top: 120, behavior: 'smooth' });
           },
           onLocationChanged: (locDetails) => {
             if (!locDetails) return;
@@ -6646,6 +6700,17 @@ window.Customer = (() => {
       if (tab === 'support' && !live.tickets) {
         const r = await api('GET', '/tickets');
         if (r && r.tickets) { Store.state.tickets = r.tickets.map(normTicket); Store.persist(); live.tickets = true; return true; }
+      }
+      if ((tab === 'bookings' || tab === 'overview') && !live.bookings) {
+        const r = await api('GET', '/bookings');
+        if (r && r.bookings && Array.isArray(r.bookings)) {
+          const map = new Map(r.bookings.map(b => [b.id, b]));
+          Store.state.bookings.forEach(b => { if (!map.has(b.id)) map.set(b.id, b); });
+          Store.state.bookings = Array.from(map.values());
+          Store.persist();
+          live.bookings = true;
+          return true;
+        }
       }
     } catch (e) { /* keep demo data */ }
     return false;
@@ -7496,32 +7561,69 @@ window.Admin = (() => {
      Talks to the Express backend using the token captured at login.
      Returns null when the API is unreachable (tabs fall back to demo). */
   const API_BASE = window.SH_API || window.SERVEHUB_API || 'http://localhost:4000/api';
-  const api = (method, path, body, timeout = 5000) => {
+  const api = (method, path, body, timeout = 7000) => {
     const token = localStorage.getItem('sh:token') || '';
     return fetch(API_BASE + path, {
       method,
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
       body: body ? JSON.stringify(body) : undefined,
       signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(timeout) : undefined,
-    }).then(r => r.json()).catch(() => null);
+    }).then(async r => {
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok && r.status === 401) {
+        toast('Admin session expired. Please sign in again.', 'warn');
+        location.hash = '#/admin-login';
+        return null;
+      }
+      return data;
+    }).catch(() => null);
   };
   const apiGet = (p, t) => api('GET', p, null, t);
   const apiPost = (p, b) => api('POST', p, b);
   const apiPatch = (p, b) => api('PATCH', p, b);
   const apiDelete = p => api('DELETE', p);
 
+  const safeDate = d => {
+    if (!d) return '—';
+    if (typeof d === 'number') return fmtDate(d);
+    const dt = new Date(d);
+    if (!isNaN(dt.getTime())) return fmtDate(dt);
+    return String(d);
+  };
+
+  const fmtMoney = n => money(Math.round(n || 0));
+
+  const VALID_STATUSES = ['pending', 'confirmed', 'assigned', 'arriving', 'started', 'completed', 'paid', 'rated', 'cancelled', 'rejected'];
+
+  const renderStatusPill = st => {
+    const meta = {
+      pending: { cls: 'badge-warn', icon: 'clock', label: 'Pending' },
+      confirmed: { cls: 'badge-success', icon: 'check', label: 'Confirmed' },
+      assigned: { cls: 'badge-primary', icon: 'user', label: 'Assigned' },
+      arriving: { cls: 'badge-primary', icon: 'navigation', label: 'Arriving' },
+      started: { cls: 'badge-warn', icon: 'zap', label: 'Started' },
+      completed: { cls: 'badge-success', icon: 'checkCircle', label: 'Completed' },
+      paid: { cls: 'badge-success', icon: 'card', label: 'Paid' },
+      rated: { cls: 'badge-neutral', icon: 'star', label: 'Rated' },
+      cancelled: { cls: 'badge-danger', icon: 'x', label: 'Cancelled' },
+      rejected: { cls: 'badge-danger', icon: 'x', label: 'Rejected' },
+    };
+    const m = meta[st] || { cls: 'badge-neutral', icon: 'info', label: st || 'Unknown' };
+    return `<span class="badge ${m.cls}">${icon(m.icon, 12)} ${m.label}</span>`;
+  };
+
   const TABS = [
+    { id: 'bookings', label: 'Bookings & Orders', icon: 'calendar', grp: 'Main' },
     { id: 'overview', label: 'Overview', icon: 'grid', grp: 'Main' },
-    { id: 'monitor', label: 'Live Booking Monitor', icon: 'navigation', grp: 'Main' },
+    { id: 'monitor', label: 'Live Monitor', icon: 'navigation', grp: 'Main' },
     { id: 'customers', label: 'Customers', icon: 'users', grp: 'Manage' },
     { id: 'professionals', label: 'Professionals', icon: 'briefcase', grp: 'Manage' },
     { id: 'services', label: 'Services', icon: 'wrench', grp: 'Manage' },
     { id: 'categories', label: 'Categories', icon: 'grid', grp: 'Manage' },
     { id: 'cities', label: 'Cities & Areas', icon: 'pin', grp: 'Manage' },
     { id: 'coupons', label: 'Coupons', icon: 'percent', grp: 'Manage' },
-    { id: 'bookings', label: 'Bookings', icon: 'calendar', grp: 'Manage' },
     { id: 'payments', label: 'Payments', icon: 'card', grp: 'Finance' },
-    { id: 'refunds', label: 'Refunds', icon: 'refreshCw', grp: 'Finance' },
+    { id: 'refunds', label: 'Refunds', icon: 'refresh', grp: 'Finance' },
     { id: 'commissions', label: 'Commissions', icon: 'percent', grp: 'Finance' },
     { id: 'plans', label: 'Membership Plans', icon: 'crown', grp: 'Finance' },
     { id: 'giftcards', label: 'Gift Cards', icon: 'gift', grp: 'Finance' },
@@ -7551,130 +7653,56 @@ window.Admin = (() => {
   const layout = (active, inner) => `
     <div class="layout"><aside class="sidebar">${sideNav(active)}</aside>
     <main class="main">${mobileNav(active)}<div class="main-head"><div><h2>${(TABS.find(t => t.id === active) || {}).label}</h2><div class="greet">Servehub Admin • ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}</div></div>
-      <span class="badge badge-success"><span class="status-dot dot-green"></span>All systems operational</span></div>
+      <span class="badge badge-success"><span class="status-dot dot-green"></span>Admin Command Center</span></div>
     <div id="tab-body">${inner}</div></main></div>`;
 
-  /* ---------- generic table ---------- */
-  const table = (cols, rows, { search = true, empty = 'No data found', right = '' } = {}) => `
-    <div class="tbl-wrap">
-      <div class="tbl-tools">${search ? `<div class="input-group grow">${icon('search', 16)}<input class="input tbl-search" placeholder="Search ${(cols[0] || '').toLowerCase()}…" aria-label="Search table"></div>` : ''}${right}</div>
-      <div class="tbl-scroll"><table><thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead>
-      <tbody>${rows.map(r => `<tr>${r.cells.map(c => `<td>${c}</td>`).join('')}<td><div class="row-actions">${(r.actions || []).join('')}</div></td></tr>`).join('') || `<tr><td colspan="${cols.length + 1}"><div class="tbl-empty">${empty}</div></td></tr>`}</tbody></table></div>
-      <div class="tbl-tools" style="justify-content:space-between"><span class="small muted">Showing ${rows.length} of ${rows.length}</span><div style="display:flex;gap:6px"><button class="mini-btn" disabled>${icon('arrowLeft', 13)}</button><button class="mini-btn" disabled>${icon('arrowRight', 13)}</button></div></div>
-    </div>`;
-
-  const wireTableSearch = root => U.$$('.tbl-search', root).forEach(inp => inp.addEventListener('input', () => {
-    const q = inp.value.toLowerCase();
-    U.$$('tbody tr', inp.closest('.tbl-wrap')).forEach(tr => tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none');
-  }));
-
   const kpi = (label, val, delta, ic, g, up = true) => `
-    <div class="card stat-card"><div class="st-top"><span class="st-ic" style="background:${g}">${icon(ic, 19)}</span><span class="st-delta ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${delta}</span></div><div class="st-val">${val}</div><div class="st-lbl">${label}</div><div class="st-orb" style="background:${g}"></div></div>`;
+    <div class="card stat-card"><div class="st-top"><span class="st-ic" style="background:${g}">${icon(ic, 19)}</span><span class="st-delta ${up ? 'up' : 'down'}">${up ? '▲' : '●'} ${delta}</span></div><div class="st-val">${val}</div><div class="st-lbl">${label}</div><div class="st-orb" style="background:${g}"></div></div>`;
 
-  const fmtMoney = n => money(Math.round(n));
+  const mini = (ic, title, cls = '', act = '', id = '') => `<button class="mini-btn ${cls}" data-act="${act || 'toast'}" data-msg="${title}" ${id ? `data-id="${id}"` : ''} title="${title}" aria-label="${title}">${icon(ic, 14)}</button>`;
 
   /* ================= TABS ================= */
   const tabs = {
     overview() {
-      const active = Store.state.bookings.filter(b => !['cancelled', 'paid', 'rated'].includes(b.status));
-      const rev = Store.state.bookings.reduce((a, b) => a + (b.total || 0), 0) + 4823500;
-      const pending = Store.state.proApps.filter(a => a.status === 'pending').length;
-      return `
-      <div class="stat-grid">
-        ${kpi('Total revenue', fmtMoney(rev), '12.4%', 'wallet', 'linear-gradient(135deg,#2563EB,#0EA5E9)')}
-        ${kpi('Total bookings', (239450).toLocaleString('en-IN'), '8.2%', 'calendar', 'linear-gradient(135deg,#10B981,#14B8A6)')}
-        ${kpi('Active bookings', active.length, '3%', 'navigation', 'linear-gradient(135deg,#F59E0B,#F97316)')}
-        ${kpi('Pending approvals', pending, pending + ' waiting', 'briefcase', 'linear-gradient(135deg,#8B5CF6,#EC4899)', false)}
-      </div>
-      <div class="grid" style="grid-template-columns:1.5fr 1fr;gap:24px;align-items:start">
-        <div class="card chart-card">
-          <div class="cc-head"><div><h3>Revenue — last 12 months</h3><div class="cc-sub">₹43.2L total • avg. ₹3.6L/mo</div></div><span class="badge badge-success">${icon('trendingUp', 12)} +12.4%</span></div>
-          ${areaChart([22, 26, 24, 29, 31, 28, 34, 37, 35, 41, 39, 46], { color: '#2563EB', labels: ['S', 'O', 'N', 'D', 'J', 'F', 'M', 'A', 'M', 'J', 'J', 'A'] })}
-        </div>
-        <div class="card chart-card">
-          <div class="cc-head"><div><h3>Bookings by category</h3><div class="cc-sub">This month</div></div></div>
-          ${donut([{ label: 'Cleaning', value: 34, color: '#2563EB' }, { label: 'AC & Appliances', value: 22, color: '#0EA5E9' }, { label: 'Salon & Beauty', value: 18, color: '#EC4899' }, { label: 'Electric/Plumb', value: 16, color: '#F59E0B' }, { label: 'Others', value: 10, color: '#10B981' }], '23.4k', 'bookings')}
-        </div>
-      </div>
-      <div class="grid g3" style="grid-template-columns:repeat(3,1fr);margin-top:24px;gap:24px">
-        <div class="card" style="padding:20px"><h3 style="font-size:15px;margin-bottom:12px">Top services</h3>${[
-          ['Deep Cleaning', 8120, 'linear-gradient(135deg,#2563EB,#0EA5E9)'], ['AC Service', 7460, 'linear-gradient(135deg,#0EA5E9,#6366F1)'], ['Salon at Home', 6910, 'linear-gradient(135deg,#F43F5E,#EC4899)'], ['Basic Home Cleaning', 6540, 'linear-gradient(135deg,#10B981,#14B8A6)']].map((s, i) => `
-          <div class="sum-row"><span style="display:flex;gap:8px;align-items:center"><span class="w-ic" style="width:30px;height:30px;border-radius:9px;background:${s[2]};display:grid;place-items:center;color:#fff">${i + 1}</span><b style="font-size:13px">${s[0]}</b></span><b style="font-size:13px">${s[1].toLocaleString('en-IN')}</b></div>`).join('')}</div>
-        <div class="card" style="padding:20px"><h3 style="font-size:15px;margin-bottom:12px">Top cities</h3>${[['Mumbai', 52.4, 'linear-gradient(135deg,#2563EB,#0EA5E9)'], ['Bengaluru', 44.1, 'linear-gradient(135deg,#10B981,#14B8A6)'], ['Delhi NCR', 38.7, 'linear-gradient(135deg,#8B5CF6,#EC4899)'], ['Hyderabad', 29.3, 'linear-gradient(135deg,#F59E0B,#F97316)']].map(s => `
-          <div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:6px"><span>${s[0]}</span><b>${money(s[1] * 10000)}</b></div><div class="progress"><i style="width:${(s[1] / 55) * 100}%;background:${s[2]}"></i></div></div>`).join('')}</div>
-        <div class="card" style="padding:20px"><h3 style="font-size:15px;margin-bottom:12px">Live activity</h3>
-          <div style="max-height:220px;overflow-y:auto">${Store.state.bookings.slice(0, 6).map(b => `<div class="list-row" style="padding:9px 0"><span class="status-dot ${b.status === 'started' ? 'dot-amber' : b.status === 'arriving' ? 'dot-blue' : 'dot-green'}"></span><div style="flex:1;min-width:0"><b style="font-size:12.5px">${esc(b.serviceName)}</b><div class="xsmall muted">${b.id}</div></div>${statusPill(b.status)}</div>`).join('')}</div>
-          <a class="btn btn-soft btn-sm btn-block" href="#/admin/monitor">Open live monitor →</a></div>
-      </div>`;
+      return `<div id="admin-overview-wrap"><div class="center" style="padding:60px 0">${icon('refresh', 24)}<div class="small muted" style="margin-top:10px">Loading overview dashboard…</div></div></div>`;
     },
-    monitor() {
-      const active = Store.state.bookings.filter(b => !['cancelled', 'paid', 'rated'].includes(b.status));
-      return `
-      <div class="card" style="padding:16px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-        <b>${icon('activity', 16)} Live bookings — ${active.length} in progress</b>
-        <div style="display:flex;gap:8px"><span class="badge badge-warn">${icon('zap', 12)} ${active.filter(b => b.status === 'started').length} started</span><span class="badge badge-primary">${icon('navigation', 12)} ${active.filter(b => b.status === 'arriving').length} arriving</span></div>
-      </div>
-      <div class="grid g3" style="grid-template-columns:repeat(3,1fr)">${active.map(b => `
-        <div class="card" style="padding:20px" data-live="${b.id}">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:14px">${esc(b.serviceName)}</b><span data-live-pill>${statusPill(b.status)}</span></div>
-          <div class="small muted">${b.id} • ${esc(b.customer || 'Customer')} • ${fmtDate(b.date)} ${b.time}</div>
-          <div style="display:flex;gap:8px;margin-top:12px"><span class="badge badge-neutral">${icon('user', 12)} ${esc(b.proName)}</span><span class="badge badge-neutral">${money(b.total)}</span></div>
-          <div style="display:flex;gap:8px;margin-top:14px"><a class="btn btn-soft btn-sm" style="flex:1" href="#/track/${b.id}">${icon('eye', 13)} View</a><button class="btn btn-outline btn-sm" data-act="admin-advance" data-id="${b.id}">${icon('refresh', 13)} Next</button></div>
-        </div>`).join('') || `<div class="tbl-wrap"><div class="tbl-empty">${icon('activity', 28)} No live bookings right now.</div></div>`}</div>`;
+    bookings() {
+      return `<div id="admin-bk-wrap"><div class="center" style="padding:60px 0">${icon('refresh', 24)}<div class="small muted" style="margin-top:10px">Loading bookings…</div></div></div>`;
     },
     customers() {
-      const rows = [
-        ['Ananya Rao', 'Mumbai', 18, fmtMoney(34200), '2 days ago'], ['Mohit Agarwal', 'Bengaluru', 12, fmtMoney(21800), '1 week ago'],
-        ['Sara Fernandes', 'Pune', 9, fmtMoney(16400), '3 weeks ago'], ['Devang Joshi', 'Delhi NCR', 7, fmtMoney(12800), '1 month ago'],
-        ['Kavya Menon', 'Hyderabad', 21, fmtMoney(42600), '2 months ago'], ['Rahul Nair', 'Chennai', 15, fmtMoney(28300), '3 months ago'],
-      ];
-      return table(['Customer', 'City', 'Bookings', 'Lifetime value', 'Last active'], rows.map(r => ({ cells: [`<div style="display:flex;gap:10px;align-items:center">${avatar(r[0], 34)}<b style="font-size:13.5px">${r[0]}</b></div>`, r[1], r[2], `<b>${r[3]}</b>`, `<span class="small muted">${r[4]}</span>`], actions: [mini('eye', 'View'), mini('mail', 'Email', 'blue')] })), { empty: '<div class="tbl-empty">No customers found</div>', right: `<button class="btn btn-outline btn-sm" data-act="toast" data-msg="Customer list exported to CSV 📄">${icon('download', 14)} Export</button>` });
+      return `<div id="admin-cust-wrap"><div class="center" style="padding:60px 0">${icon('refresh', 24)}<div class="small muted" style="margin-top:10px">Loading customer accounts…</div></div></div>`;
     },
     professionals() {
-      const pending = Store.state.proApps;
-      const approved = [['Rahul Sharma', 'AC & Appliances', 'Mumbai', '4.9 ★', '1240'], ['Priya Menon', 'Deep Cleaning', 'Mumbai', '4.8 ★', '980'], ['Arjun Patel', 'Electrician', 'Bengaluru', '4.7 ★', '760']];
-      return `
-      ${pending.length ? `<div class="card" style="padding:20px;margin-bottom:24px;border-color:var(--warn-100);background:var(--warn-50)">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><b>${icon('timer', 16)} Applications awaiting review (${pending.length})</b><span class="badge badge-warn">Avg. review 6 hrs</span></div>
-        ${pending.map(a => `<div class="list-row" style="border-color:var(--warn-100)">
-          ${avatar(a.name, 40)}<div style="flex:1;min-width:0"><b style="font-size:13.5px">${esc(a.name)}</b><div class="xsmall muted">${a.id} • ${esc(a.cat)} • ${esc(a.city)} • ${a.exp} yrs • applied ${timeAgo(a.createdAt)}</div></div>
-          <div class="row-actions"><button class="btn btn-success btn-sm" data-act="approve-pro" data-id="${a.id}">${icon('check', 14)} Approve</button><button class="btn btn-danger btn-sm" data-act="reject-pro" data-id="${a.id}">${icon('x', 14)} Reject</button><button class="mini-btn blue" data-act="view-pro" data-id="${a.id}" title="Review documents">${icon('eye', 15)}</button></div></div>`).join('')}
-      </div>` : ''}
-      <h3 style="font-size:15px;margin-bottom:12px">Approved professionals</h3>
-      ${table(['Professional', 'Category', 'City', 'Rating', 'Jobs done'], approved.map(p => ({ cells: [`<div style="display:flex;gap:10px;align-items:center">${avatar(p[0], 34)}<b style="font-size:13.5px">${p[0]}</b></div>`, p[1], p[2], p[3], p[4]], actions: [mini('eye', 'Profile', 'blue'), mini('settings', 'Manage'), mini('x', 'Suspend', 'no')] })), { search: false, right: `<button class="btn btn-primary btn-sm" data-act="toast" data-msg="New professional invite sent 📧">${icon('plus', 13)} Invite pro</button>` })}`;
+      return `<div id="admin-pros-wrap"><div class="center" style="padding:60px 0">${icon('refresh', 24)}<div class="small muted" style="margin-top:10px">Loading professionals…</div></div></div>`;
     },
     services() {
-      const rows = DATA.services.slice(0, 12);
-      return table(['Service', 'Category', 'Price', 'Rating', 'Bookings', 'Status'], rows.map(s => ({ cells: [`<b style="font-size:13.5px">${esc(s.name)}</b>`, esc(DATA.catBySlug(s.cat)?.name || ''), `<b>${money(s.price)}</b>`, `${s.rating} ★`, s.bookings.toLocaleString('en-IN'), `<span class="badge badge-success">Active</span>`], actions: [mini('edit', 'Edit', 'blue'), mini('eye', 'View'), mini('trash', 'Delete', 'no')] })), { right: `<button class="btn btn-primary btn-sm" data-act="toast" data-msg="New service form opened 📝">${icon('plus', 13)} Add service</button>` });
+      return `<div id="admin-svcs-wrap"><div class="center" style="padding:60px 0">${icon('refresh', 24)}<div class="small muted" style="margin-top:10px">Loading services catalog…</div></div></div>`;
     },
     categories() {
       const rows = DATA.categories;
-      return table(['Category', 'Services', 'Price from', 'Rating', 'Bookings'], rows.map(c => ({ cells: [`<div style="display:flex;gap:10px;align-items:center"><span class="w-ic" style="width:34px;height:34px;border-radius:10px;background:${c.g};display:grid;place-items:center;color:#fff">${icon(c.icon, 16)}</span><b style="font-size:13.5px">${c.name}</b></div>`, DATA.servicesByCat(c.slug).length, money(c.price), `${c.rating} ★`, c.bookings.toLocaleString('en-IN')], actions: [mini('edit', 'Edit', 'blue'), mini('eye', 'View')] })));
+      const t = (cols, rws) => `
+        <div class="tbl-wrap">
+          <div class="tbl-scroll"><table><thead><tr>${cols.map(c => `<th>${c}</th>`).join('')}<th></th></tr></thead>
+          <tbody>${rws.map(r => `<tr>${r.cells.map(c => `<td>${c}</td>`).join('')}<td><div class="row-actions">${(r.actions || []).join('')}</div></td></tr>`).join('')}</tbody></table></div>
+        </div>`;
+      return t(['Category', 'Services', 'Price from', 'Rating', 'Bookings'], rows.map(c => ({ cells: [`<div style="display:flex;gap:10px;align-items:center"><span class="w-ic" style="width:34px;height:34px;border-radius:10px;background:${c.g};display:grid;place-items:center;color:#fff">${icon(c.icon, 16)}</span><b style="font-size:13.5px">${c.name}</b></div>`, DATA.servicesByCat(c.slug).length, money(c.price), `${c.rating} ★`, c.bookings.toLocaleString('en-IN')], actions: [mini('edit', 'Edit', 'blue'), mini('eye', 'View')] })));
     },
     cities() {
       const rows = DATA.cities;
-      return table(['City', 'Areas', 'Bookings', 'Status'], rows.map(c => ({ cells: [`<b style="font-size:13.5px">${c.name}</b>`, c.areas.map(a => `<span class="pro-tag">${a}</span>`).join(' '), (Math.random() * 40000 + 8000).toFixed(0), `<span class="badge badge-success">Serviceable</span>`], actions: [mini('edit', 'Edit', 'blue'), mini('plus', 'Add area'), mini('eye', 'View')] })), { right: `<button class="btn btn-primary btn-sm" data-act="toast" data-msg="City onboarding flow opened 🏙️">${icon('plus', 13)} Onboard city</button>` });
+      return `
+        <div class="tbl-wrap">
+          <div class="tbl-tools"><span class="small muted">Serviceable cities across India</span><button class="btn btn-primary btn-sm" style="margin-left:auto" data-act="toast" data-msg="City onboarded 🏙️">${icon('plus', 13)} Onboard city</button></div>
+          <div class="tbl-scroll"><table><thead><tr><th>City</th><th>Areas</th><th>Bookings</th><th>Status</th></tr></thead>
+          <tbody>${rows.map(c => `<tr><td><b style="font-size:13.5px">${c.name}</b></td><td>${c.areas.map(a => `<span class="pro-tag">${a}</span>`).join(' ')}</td><td>${(Math.random() * 40000 + 8000).toFixed(0)}</td><td><span class="badge badge-success">Serviceable</span></td></tr>`).join('')}</tbody></table></div>
+        </div>`;
     },
     coupons() { return mgrShell('coupons'); },
     giftcards() { return mgrShell('giftcards'); },
-    bookings() {
-      const rows = Store.state.bookings.slice(0, 20);
-      return table(['Booking', 'Service', 'Customer', 'Date', 'Amount', 'Status'], rows.map(b => ({ cells: [`<b style="font-size:13px">${b.id}</b>`, `<b style="font-size:13px">${esc(b.serviceName)}</b>`, esc(b.customer || Store.currentUser()?.name || 'Customer'), `${fmtDate(b.date)} ${b.time}`, `<b>${money(b.total)}</b>`, statusPill(b.status)], actions: [mini('eye', 'View', 'blue'), mini('user', 'Assign pro'), mini('x', 'Cancel', 'no')] })), { right: `<span class="badge badge-neutral">${rows.length} recent</span>` });
-    },
     payments() {
-      const methods = [['UPI', 42], ['Card', 27], ['Wallet', 14], ['Net Banking', 9], ['Cash', 8]];
-      const rows = Store.state.bookings.slice(0, 10).map((b, i) => ({ cells: [b.id, esc(b.serviceName), methods[i % 5][0], `<b>${money(b.total)}</b>`, `<span class="badge badge-success">${icon('check', 12)} Settled</span>`], actions: [mini('eye', 'View', 'blue'), mini('download', 'Receipt')] }));
-      return `<div class="grid g3" style="grid-template-columns:repeat(3,1fr);margin-bottom:24px">${methods.map(m => `<div class="card stat-card"><div class="st-top"><span class="st-ic" style="background:linear-gradient(135deg,#2563EB,#0EA5E9)">${icon(m[0] === 'UPI' ? 'smartphone' : m[0] === 'Card' ? 'card' : m[0] === 'Wallet' ? 'wallet' : m[0] === 'Cash' ? 'cash' : 'bank', 18)}</span><span class="st-lbl">${m[0]}</span></div><div class="st-val">${m[1]}%</div><div class="st-delta up">${fmtMoney(428000 + i * 12000)} volume</div></div>`).join('')}</div>${table(['Transaction', 'Service', 'Method', 'Amount', 'Status'], rows, { search: false })}`;
+      return `<div id="admin-payments-wrap"><div class="center" style="padding:60px 0">${icon('refresh', 24)}<div class="small muted" style="margin-top:10px">Loading payment records…</div></div></div>`;
     },
     refunds() {
-      const cancellable = Store.state.bookings.filter(b => b.status === 'cancelled');
-      const rows = cancellable.map(b => ({ cells: [b.id, esc(b.serviceName), fmtDate(b.date), `<b>${money(b.total)}</b>`, `<span class="badge badge-success">Refunded</span>`], actions: [mini('eye', 'View', 'blue'), mini('refreshCw', 'Reprocess', 'blue')] }));
-      return `
-      <div class="card" style="padding:18px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-        <div><b style="font-size:14px">Refund policy</b><div class="small muted">Full refunds within 24h of slot • 10% fee between 6–24h • Instant wallet credits</div></div>
-        <span class="badge badge-neutral">${money(68400)} refunded this month</span>
-      </div>
-      ${table(['Booking', 'Service', 'Date', 'Amount', 'Status'], rows, { search: false })}`;
+      return `<div id="admin-refunds-wrap"><div class="center" style="padding:60px 0">${icon('refresh', 24)}<div class="small muted" style="margin-top:10px">Loading refunds…</div></div></div>`;
     },
     commissions() {
       return `
@@ -7686,30 +7714,40 @@ window.Admin = (() => {
             <b style="flex:1;font-size:13.5px">${c.name}</b>
             <div style="display:flex;align-items:center;gap:8px"><span class="badge badge-neutral">${rate}%</span><input type="range" min="5" max="30" value="${rate}" style="width:120px" aria-label="Commission rate"></div>
           </div>`; }).join('')}
-        <button class="btn btn-primary" style="margin-top:16px" data-act="toast" data-msg="Commission settings saved ✅">${icon('save', 14)} Save rates</button>
+        <button class="btn btn-primary" style="margin-top:16px" data-act="toast" data-msg="Commission settings saved ✅">${icon('check', 14)} Save rates</button>
       </div>`;
     },
     plans() { return mgrShell('plans'); },
+    monitor() {
+      const active = Store.state.bookings.filter(b => !['cancelled', 'paid', 'rated'].includes(b.status));
+      return `
+      <div class="card" style="padding:16px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <b>${icon('activity', 16)} Live bookings — ${active.length} in progress</b>
+        <div style="display:flex;gap:8px"><span class="badge badge-warn">${icon('zap', 12)} ${active.filter(b => b.status === 'started').length} started</span><span class="badge badge-primary">${icon('navigation', 12)} ${active.filter(b => b.status === 'arriving').length} arriving</span></div>
+      </div>
+      <div class="grid g3" style="grid-template-columns:repeat(3,1fr)">${active.map(b => `
+        <div class="card" style="padding:20px" data-live="${b.id}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:14px">${esc(b.serviceName)}</b><span data-live-pill>${renderStatusPill(b.status)}</span></div>
+          <div class="small muted">${b.id} • ${esc(b.customerName || b.customer || 'Customer')} • ${safeDate(b.date)} ${b.time || ''}</div>
+          <div style="display:flex;gap:8px;margin-top:12px"><span class="badge badge-neutral">${icon('user', 12)} ${esc(b.proName || 'Unassigned')}</span><span class="badge badge-neutral">${fmtMoney(b.total)}</span></div>
+          <div style="display:flex;gap:8px;margin-top:14px"><button class="btn btn-soft btn-sm" style="flex:1" data-b-act="view" data-id="${b.id}">${icon('eye', 13)} View</button><button class="btn btn-outline btn-sm" data-b-act="status" data-id="${b.id}">${icon('refresh', 13)} Status</button></div>
+        </div>`).join('') || `<div class="tbl-wrap"><div class="tbl-empty">${icon('activity', 28)} No live bookings right now.</div></div>`}</div>`;
+    },
     analytics() {
       return `
       <div class="stat-grid">
         ${kpi('Conversion rate', '3.9%', '0.4%', 'activity', 'linear-gradient(135deg,#2563EB,#0EA5E9)')}
         ${kpi('Customer growth', '+18,240', '9.1%', 'users', 'linear-gradient(135deg,#10B981,#14B8A6)')}
         ${kpi('Professional growth', '+1,120', '6.3%', 'briefcase', 'linear-gradient(135deg,#F59E0B,#F97316)')}
-        ${kpi('Repeat rate', '68%', '2.2%', 'refreshCw', 'linear-gradient(135deg,#8B5CF6,#EC4899)')}
+        ${kpi('Repeat rate', '68%', '2.2%', 'refresh', 'linear-gradient(135deg,#8B5CF6,#EC4899)')}
       </div>
       <div class="grid" style="grid-template-columns:1.5fr 1fr;gap:24px">
         <div class="card chart-card"><div class="cc-head"><div><h3>Daily bookings</h3><div class="cc-sub">Peak: Saturday • Avg. 840/day</div></div></div>${barChart([620, 700, 680, 760, 720, 980, 890, 640, 720, 690, 770, 940, 860, 990], ['M', 'T', 'W', 'T', 'F', 'S', 'S', 'M', 'T', 'W', 'T', 'F', 'S', 'S'])}</div>
         <div class="card chart-card"><div class="cc-head"><div><h3>Monthly revenue</h3><div class="cc-sub">FY 2026–27</div></div></div>${barChart([28, 33, 31, 38, 42, 40, 47], ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'])}</div>
-      </div>
-      <div class="grid g3" style="grid-template-columns:repeat(3,1fr);margin-top:24px">
-        <div class="card" style="padding:20px"><h3 style="font-size:15px;margin-bottom:10px">Acquisition channels</h3>${[['Organic search', 38], ['Referrals', 24], ['App store', 19], ['Social', 12], ['Paid ads', 7]].map(c => `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;margin-bottom:4px"><span>${c[0]}</span><b>${c[1]}%</b></div><div class="progress"><i style="width:${c[1] * 2.2}%"></i></div></div>`).join('')}</div>
-        <div class="card" style="padding:20px"><h3 style="font-size:15px;margin-bottom:10px">Hourly demand</h3>${[['09–12', 18], ['12–15', 26], ['15–18', 32], ['18–21', 24]].map(c => `<div style="margin-bottom:10px"><div style="display:flex;justify-content:space-between;font-size:12.5px;font-weight:600;margin-bottom:4px"><span>${c[0]}</span><b>${c[1]}%</b></div><div class="progress"><i style="width:${c[1] * 3}%;background:var(--grad)"></i></div></div>`).join('')}</div>
-        <div class="card" style="padding:20px"><h3 style="font-size:15px;margin-bottom:10px">Net promoter score</h3><div style="text-align:center;padding:10px 0"><div style="font-size:44px;font-weight:900;color:var(--success-600)">+72</div><div class="small muted">Excellent • up 4 pts</div></div><div class="progress"><i style="width:86%"></i></div></div>
       </div>`;
     },
     reports() {
-      const reports = [['Revenue report', 'Jul 2026', 'barChart'], ['Booking funnel', 'Last 30 days', 'activity'], ['Professional performance', 'Q2 2026', 'users'], ['City-wise growth', 'Jul 2026', 'pin'], ['Refund & disputes', 'Jul 2026', 'refreshCw'], ['Tax summary (GSTR-1)', 'Q2 2026', 'coins']];
+      const reports = [['Revenue report', 'Jul 2026', 'barChart'], ['Booking funnel', 'Last 30 days', 'activity'], ['Professional performance', 'Q2 2026', 'users'], ['City-wise growth', 'Jul 2026', 'pin'], ['Refund & disputes', 'Jul 2026', 'refresh'], ['Tax summary (GSTR-1)', 'Q2 2026', 'coins']];
       return `<div class="grid g2" style="grid-template-columns:1fr 1fr">${reports.map(r => `
         <div class="card card-hover" style="padding:20px;display:flex;align-items:center;gap:14px"><span class="n-ic" style="width:44px;height:44px;border-radius:13px;background:var(--primary-50);color:var(--primary-600);display:grid;place-items:center">${icon(r[2], 19)}</span>
         <div style="flex:1"><b style="font-size:14px">${r[0]}</b><div class="xsmall muted">${r[1]} • PDF / CSV / XLSX</div></div>
@@ -7717,10 +7755,20 @@ window.Admin = (() => {
     },
     cms() {
       const pages = [['Homepage hero', 'Landing page', 'Edited 2h ago', 'live'], ['Search & categories', 'Discovery', 'Edited 1d ago', 'live'], ['Booking confirmation', 'Transactional', 'Edited 3d ago', 'draft'], ['Email templates', 'Notifications', 'Edited 1w ago', 'live'], ['App push copy', 'Notifications', 'Edited 2w ago', 'draft']];
-      return table(['Page', 'Type', 'Last edited', 'Status'], pages.map(p => ({ cells: [`<b style="font-size:13.5px">${p[0]}</b>`, p[1], `<span class="small muted">${p[2]}</span>`, `<span class="badge ${p[3] === 'live' ? 'badge-success' : 'badge-warn'}">${p[3] === 'live' ? 'Live' : 'Draft'}</span>`], actions: [mini('edit', 'Edit', 'blue'), mini('eye', 'Preview'), mini('send', 'Publish', 'ok')] })), { right: `<button class="btn btn-primary btn-sm" data-act="toast" data-msg="New content page created 📝">${icon('plus', 13)} New page</button>` });
+      return `
+        <div class="tbl-wrap">
+          <div class="tbl-tools"><button class="btn btn-primary btn-sm" style="margin-left:auto" data-act="toast" data-msg="New content page created 📝">${icon('plus', 13)} New page</button></div>
+          <div class="tbl-scroll"><table><thead><tr><th>Page</th><th>Type</th><th>Last edited</th><th>Status</th></tr></thead>
+          <tbody>${pages.map(p => `<tr><td><b>${p[0]}</b></td><td>${p[1]}</td><td><span class="small muted">${p[2]}</span></td><td><span class="badge ${p[3] === 'live' ? 'badge-success' : 'badge-warn'}">${p[3] === 'live' ? 'Live' : 'Draft'}</span></td></tr>`).join('')}</tbody></table></div>
+        </div>`;
     },
     blog() {
-      return table(['Post', 'Category', 'Date', 'Views'], DATA.blog.map(p => ({ cells: [`<b style="font-size:13.5px">${esc(p.title)}</b>`, p.cat, p.date, (Math.random() * 40 + 4).toFixed(1) + 'k'], actions: [mini('edit', 'Edit', 'blue'), mini('eye', 'Preview'), mini('trash', 'Delete', 'no')] })), { right: `<button class="btn btn-primary btn-sm" data-act="toast" data-msg="Blog editor opened ✍️">${icon('plus', 13)} Write post</button>` });
+      return `
+        <div class="tbl-wrap">
+          <div class="tbl-tools"><button class="btn btn-primary btn-sm" style="margin-left:auto" data-act="toast" data-msg="Blog editor opened ✍️">${icon('plus', 13)} Write post</button></div>
+          <div class="tbl-scroll"><table><thead><tr><th>Post</th><th>Category</th><th>Date</th><th>Views</th></tr></thead>
+          <tbody>${DATA.blog.map(p => `<tr><td><b>${esc(p.title)}</b></td><td>${p.cat}</td><td>${p.date}</td><td>${(Math.random() * 40 + 4).toFixed(1)}k</td></tr>`).join('')}</tbody></table></div>
+        </div>`;
     },
     banners() {
       return `<div class="grid g3" style="grid-template-columns:repeat(3,1fr)">${[
@@ -7743,7 +7791,7 @@ window.Admin = (() => {
           <div class="sum-row"><span class="muted">Referee reward</span><b>₹100</b></div>
           <div class="sum-row"><span class="muted">Min. booking for reward</span><b>₹399</b></div>
           <div class="sum-row"><span class="muted">Reward expiry</span><b>30 days</b></div>
-          <button class="btn btn-primary btn-sm" style="margin-top:14px" data-act="toast" data-msg="Referral settings saved ✅">${icon('save', 14)} Save</button></div>
+          <button class="btn btn-primary btn-sm" style="margin-top:14px" data-act="toast" data-msg="Referral settings saved ✅">${icon('check', 14)} Save</button></div>
         <div class="card" style="padding:22px"><h3 style="font-size:15px;margin-bottom:14px">Top referrers</h3>${[['Kavya Menon', 48, '₹4,800'], ['Mohit Agarwal', 36, '₹3,600'], ['Sara Fernandes', 29, '₹2,900'], ['Devang Joshi', 24, '₹2,400']].map(r => `<div class="list-row" style="padding:10px 0">${avatar(r[0], 36)}<div style="flex:1"><b style="font-size:13px">${r[0]}</b><div class="xsmall muted">${r[1]} referrals</div></div><b>${r[2]}</b></div>`).join('')}</div>
       </div>`;
     },
@@ -7754,14 +7802,13 @@ window.Admin = (() => {
           <div class="field"><label class="label">GST rate (%)</label><div style="display:flex;gap:8px"><input class="input" value="18" style="max-width:120px"><button class="btn btn-soft" data-act="toast" data-msg="GST rate updated ✅">Save</button></div></div>
           <div class="field"><label class="label">Business GSTIN</label><input class="input" value="27ABCDE1234F1Z5"></div>
           <div class="field"><label class="label">Legal entity</label><input class="input" value="Servehub Services Pvt. Ltd."></div>
-          <div class="card glass" style="padding:14px;font-size:12.5px"><b>${icon('info', 13)} GST split:</b> <span class="muted">9% CGST + 9% SGST on every invoice. Auto-filed monthly via GSTR-1.</span></div>
         </div>
         <div class="card" style="padding:24px"><h3 style="font-size:15px;margin-bottom:16px">TDS & settlements</h3>
           <div class="sum-row"><span class="muted">TDS on pro payouts (194J)</span><b>2%</b></div>
           <div class="sum-row"><span class="muted">Payout cycle</span><b>Weekly (Fri)</b></div>
           <div class="sum-row"><span class="muted">Settlement fee</span><b>Free</b></div>
           <div class="sum-row"><span class="muted">Last GSTR-1 filed</span><b>Jul 7, 2026</b></div>
-          <button class="btn btn-primary btn-sm" style="margin-top:14px" data-act="toast" data-msg="Tax settings saved ✅">${icon('save', 14)} Save</button></div>
+          <button class="btn btn-primary btn-sm" style="margin-top:14px" data-act="toast" data-msg="Tax settings saved ✅">${icon('check', 14)} Save</button></div>
       </div>`;
     },
     roles() {
@@ -7773,46 +7820,1167 @@ window.Admin = (() => {
         <div class="tbl-scroll"><table><thead><tr><th>Permission</th>${roles.map(r => `<th class="center" style="text-align:center">${r}</th>`).join('')}</tr></thead><tbody>
         ${perms.map(p => `<tr><td><b style="font-size:13px">${p[0]}</b></td>${p.slice(1).map(v => `<td class="center" style="text-align:center">${v ? `<span style="color:var(--success-600)">${icon('checkCircle', 17)}</span>` : '<span style="color:var(--ink-4)">—</span>'}</td>`).join('')}</tr>`).join('')}
         </tbody></table></div>
-        <button class="btn btn-primary" style="margin-top:16px" data-act="toast" data-msg="Permissions saved ✅">${icon('save', 14)} Save changes</button>
       </div>`;
     },
     notifications() {
       return `
       <div class="grid" style="grid-template-columns:1fr 1fr;gap:24px">
         <div class="card" style="padding:24px"><h3 style="font-size:16px;margin-bottom:14px">Broadcast a notification</h3>
-          <div class="field"><label class="label">Audience</label><select class="select"><option>All customers</option><option>All professionals</option><option>Plus & Pro members</option><option>City: Mumbai</option><option>Custom segment</option></select></div>
-          <div class="field"><label class="label" for="bc-title">Title</label><input class="input" id="bc-title" placeholder="e.g. Monsoon AC offer is live!"></div>
-          <div class="field"><label class="label" for="bc-msg">Message</label><textarea class="textarea" id="bc-msg" placeholder="Write your message…"></textarea></div>
-          <div class="field"><label class="label">Channels</label><div class="radio-pill">${[['push', 'Push'], ['email', 'Email'], ['sms', 'SMS'], ['whatsapp', 'WhatsApp']].map((c, i) => `<label><input type="checkbox" ${i === 0 ? 'checked' : ''}><span>${c[1]}</span></label>`).join('')}</div></div>
-          <button class="btn btn-primary btn-block" data-act="broadcast">${icon('send', 0)} Send to 2.4M users</button>
+          <div class="field"><label class="label">Audience</label><select class="select" id="bc-audience"><option value="all">All registered users</option><option value="customers">All customers only</option><option value="pros">All professionals only</option></select></div>
+          <div class="field"><label class="label" for="bc-title">Title</label><input class="input" id="bc-title" placeholder="e.g. Special Weekend Offer is live!"></div>
+          <div class="field"><label class="label" for="bc-msg">Message</label><textarea class="textarea" id="bc-msg" placeholder="Write notification message…"></textarea></div>
+          <button class="btn btn-primary btn-block" id="bc-send-btn">${icon('bell', 16)} Send broadcast notification</button>
         </div>
-        <div class="card" style="padding:24px"><h3 style="font-size:16px;margin-bottom:14px">Recent broadcasts</h3>
-          ${[['Monsoon AC offer is live!', 'Push • 2.4M sent', '2h ago', 'Open rate 34%'], ['₹50 off your first booking', 'Email • 1.1M sent', '1d ago', 'CTR 6.2%'], ['New city: Ahmedabad 🎉', 'Push • 1.2M sent', '3d ago', 'Open rate 41%']].map(n => `
+        <div class="card" style="padding:24px"><h3 style="font-size:16px;margin-bottom:14px">Recent broadcast history</h3>
+          ${[['Special monsoon offer is live!', 'All users • Just now'], ['Welcome to Servehub premium home services', 'All customers • 2 days ago'], ['Professional safety guidelines reminder', 'All professionals • 5 days ago']].map(n => `
           <div class="list-row"><span class="n-ic" style="width:38px;height:38px;border-radius:11px;background:var(--primary-50);color:var(--primary-600);display:grid;place-items:center">${icon('bell', 16)}</span>
-          <div style="flex:1;min-width:0"><b style="font-size:13px">${n[0]}</b><div class="xsmall muted">${n[1]} • ${n[2]}</div></div><span class="badge badge-success">${n[3]}</span></div>`).join('')}
+          <div style="flex:1;min-width:0"><b style="font-size:13px">${n[0]}</b><div class="xsmall muted">${n[1]}</div></div><span class="badge badge-success">Sent</span></div>`).join('')}
         </div>
       </div>`;
     },
   };
 
-  const mini = (ic, title, cls = '') => `<button class="mini-btn ${cls}" data-act="toast" data-msg="${title} → (demo)" title="${title}" aria-label="${title}">${icon(ic, 14)}</button>`;
+  /* ================= LIVE LOADERS ================= */
 
-  /* ================= LIVE-MANAGED TABS =================
-     coupons / giftcards / plans / tickets / reviews load from the admin API
-     when reachable; otherwise they fall back to local demo data so the panel
-     is always usable. Every mutation re-renders the tab body. */
+  /* ---------- 1. Overview (Step 2) ---------- */
+  const loadOverview = async () => {
+    const wrap = U.$('#admin-overview-wrap');
+    if (!wrap) return;
+    const stats = (await apiGet('/admin/stats')) || {};
+    const totalBk = stats.totalBookings ?? Store.state.bookings.length;
+    const pendingBk = stats.pendingBookings ?? Store.state.bookings.filter(b => b.status === 'pending').length;
+    const confirmedBk = stats.confirmedBookings ?? Store.state.bookings.filter(b => b.status === 'confirmed').length;
+    const inProgBk = stats.inProgressBookings ?? Store.state.bookings.filter(b => ['assigned', 'arriving', 'started'].includes(b.status)).length;
+    const completedBk = stats.completedBookings ?? Store.state.bookings.filter(b => ['completed', 'paid', 'rated'].includes(b.status)).length;
+    const cancelledBk = stats.cancelledBookings ?? Store.state.bookings.filter(b => ['cancelled', 'rejected'].includes(b.status)).length;
+    const customersCount = stats.customers ?? 6;
+    const prosCount = stats.professionals ?? (DATA.pros ? DATA.pros.length : 12);
+    const rev = stats.revenue ?? (Store.state.bookings.reduce((a, b) => a + (b.total || 0), 0) + 4823500);
+    const recent = stats.recentBookings || Store.state.bookings.slice(0, 8);
+
+    wrap.innerHTML = `
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+        ${kpi('Total Bookings', totalBk.toLocaleString('en-IN'), 'All time', 'calendar', 'linear-gradient(135deg,#2563EB,#0EA5E9)')}
+        ${kpi('New / Pending', pendingBk.toLocaleString('en-IN'), pendingBk + ' waiting', 'clock', 'linear-gradient(135deg,#F59E0B,#D97706)', false)}
+        ${kpi('Confirmed', confirmedBk.toLocaleString('en-IN'), 'Ready for pro', 'check', 'linear-gradient(135deg,#10B981,#059669)')}
+        ${kpi('In-Progress', inProgBk.toLocaleString('en-IN'), 'Active jobs', 'navigation', 'linear-gradient(135deg,#8B5CF6,#6366F1)')}
+      </div>
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:28px">
+        ${kpi('Completed', completedBk.toLocaleString('en-IN'), 'Successful', 'checkCircle', 'linear-gradient(135deg,#10B981,#14B8A6)')}
+        ${kpi('Cancelled', cancelledBk.toLocaleString('en-IN'), 'Cancelled/Rejected', 'x', 'linear-gradient(135deg,#EF4444,#DC2626)', false)}
+        ${kpi('Registered Customers', customersCount.toLocaleString('en-IN'), 'Verified users', 'users', 'linear-gradient(135deg,#06B6D4,#3B82F6)')}
+        ${kpi('Labourers / Pros', prosCount.toLocaleString('en-IN'), 'Active network', 'briefcase', 'linear-gradient(135deg,#F59E0B,#F97316)')}
+      </div>
+
+      <div class="card" style="padding:16px 20px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;background:var(--surface);border-color:var(--line);flex-wrap:wrap;gap:12px">
+        <div style="display:flex;gap:14px;align-items:center">
+          <span class="st-ic" style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#2563EB,#0EA5E9);display:grid;place-items:center;color:#fff">${icon('wallet', 18)}</span>
+          <div><div class="xsmall muted">Total Settled Revenue</div><b style="font-size:18px">${fmtMoney(rev)}</b></div>
+        </div>
+        <div style="display:flex;gap:10px">
+          <a class="btn btn-outline btn-sm" href="#/admin/bookings">${icon('calendar', 14)} Manage Bookings</a>
+          <a class="btn btn-primary btn-sm" href="#/admin/monitor">${icon('navigation', 14)} Live Monitor</a>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:1.5fr 1fr;gap:24px;align-items:start">
+        <div class="card chart-card">
+          <div class="cc-head"><div><h3>Revenue — monthly volume</h3><div class="cc-sub">₹43.2L estimated total • avg. ₹3.6L/mo</div></div><span class="badge badge-success">${icon('trendingUp', 12)} +12.4%</span></div>
+          ${areaChart([22, 26, 24, 29, 31, 28, 34, 37, 35, 41, 39, 46], { color: '#2563EB', labels: ['S', 'O', 'N', 'D', 'J', 'F', 'M', 'A', 'M', 'J', 'J', 'A'] })}
+        </div>
+        <div class="card chart-card">
+          <div class="cc-head"><div><h3>Bookings by Category</h3><div class="cc-sub">Current distribution</div></div></div>
+          ${donut([{ label: 'Cleaning', value: 34, color: '#2563EB' }, { label: 'AC Repair', value: 22, color: '#0EA5E9' }, { label: 'Salon', value: 18, color: '#EC4899' }, { label: 'Electric/Plumb', value: 16, color: '#F59E0B' }, { label: 'Others', value: 10, color: '#10B981' }], totalBk.toString(), 'bookings')}
+        </div>
+      </div>
+
+      <div class="grid g3" style="grid-template-columns:repeat(3,1fr);margin-top:24px;gap:24px">
+        <div class="card" style="padding:20px"><h3 style="font-size:15px;margin-bottom:12px">Top Requested Services</h3>${[
+          ['Deep Home Cleaning', 8120, 'linear-gradient(135deg,#2563EB,#0EA5E9)'], ['AC Service & Repair', 7460, 'linear-gradient(135deg,#0EA5E9,#6366F1)'], ['Salon at Home', 6910, 'linear-gradient(135deg,#F43F5E,#EC4899)'], ['Basic Home Cleaning', 6540, 'linear-gradient(135deg,#10B981,#14B8A6)']].map((s, i) => `
+          <div class="sum-row"><span style="display:flex;gap:8px;align-items:center"><span class="w-ic" style="width:28px;height:28px;border-radius:8px;background:${s[2]};display:grid;place-items:center;color:#fff;font-size:12px">${i + 1}</span><b style="font-size:13px">${s[0]}</b></span><b style="font-size:13px">${s[1].toLocaleString('en-IN')}</b></div>`).join('')}</div>
+        <div class="card" style="padding:20px"><h3 style="font-size:15px;margin-bottom:12px">Service Coverage</h3>${[['Mumbai', 52.4, 'linear-gradient(135deg,#2563EB,#0EA5E9)'], ['Bengaluru', 44.1, 'linear-gradient(135deg,#10B981,#14B8A6)'], ['Delhi NCR', 38.7, 'linear-gradient(135deg,#8B5CF6,#EC4899)'], ['Hyderabad', 29.3, 'linear-gradient(135deg,#F59E0B,#F97316)']].map(s => `
+          <div style="margin-bottom:14px"><div style="display:flex;justify-content:space-between;font-size:13px;font-weight:600;margin-bottom:6px"><span>${s[0]}</span><b>${money(s[1] * 10000)}</b></div><div class="progress"><i style="width:${(s[1] / 55) * 100}%;background:${s[2]}"></i></div></div>`).join('')}</div>
+        <div class="card" style="padding:20px"><h3 style="font-size:15px;margin-bottom:12px">Recent Activity</h3>
+          <div style="max-height:220px;overflow-y:auto">${recent.slice(0, 6).map(b => `<div class="list-row" style="padding:9px 0"><span class="status-dot dot-green"></span><div style="flex:1;min-width:0"><b style="font-size:12.5px">${esc(b.serviceName || b.serviceId)}</b><div class="xsmall muted">${b.id} • ${esc(b.customerName || b.customer || 'Customer')}</div></div>${renderStatusPill(b.status)}</div>`).join('') || '<div class="small muted">No recent bookings</div>'}</div>
+          <a class="btn btn-soft btn-sm btn-block" style="margin-top:10px" href="#/admin/bookings">View all orders →</a></div>
+      </div>
+    `;
+  };
+
+  /* ---------- 2. Bookings Management (Step 3) ---------- */
+  let bkData = [];
+  let bkFilter = { q: '', status: 'all', cat: 'all', sort: 'newest', page: 1, limit: 10 };
+
+  const loadBookings = async () => {
+    const wrap = U.$('#admin-bk-wrap');
+    if (!wrap) return;
+    const res = await apiGet('/admin/bookings');
+    if (res && res.bookings) {
+      bkData = res.bookings;
+      // sync with client Store
+      const map = new Map(bkData.map(b => [b.id, b]));
+      Store.state.bookings.forEach(b => { if (!map.has(b.id)) map.set(b.id, b); });
+      Store.state.bookings = Array.from(map.values());
+      Store.persist();
+    } else {
+      bkData = Store.state.bookings || [];
+    }
+    renderBookingsView(wrap);
+  };
+
+  const renderBookingsView = (wrap) => {
+    // filter and sort
+    let list = [...bkData];
+    if (bkFilter.q) {
+      const q = bkFilter.q.toLowerCase();
+      list = list.filter(b =>
+        (b.id || '').toLowerCase().includes(q) ||
+        (b.customerName || b.customer || '').toLowerCase().includes(q) ||
+        (b.customerPhone || '').toLowerCase().includes(q) ||
+        (b.customerEmail || '').toLowerCase().includes(q) ||
+        (b.serviceName || '').toLowerCase().includes(q) ||
+        (b.proName || '').toLowerCase().includes(q)
+      );
+    }
+    if (bkFilter.status !== 'all') {
+      if (bkFilter.status === 'in-progress') list = list.filter(b => ['assigned', 'arriving', 'started'].includes(b.status));
+      else if (bkFilter.status === 'completed') list = list.filter(b => ['completed', 'paid', 'rated'].includes(b.status));
+      else if (bkFilter.status === 'cancelled') list = list.filter(b => ['cancelled', 'rejected'].includes(b.status));
+      else list = list.filter(b => b.status === bkFilter.status);
+    }
+    if (bkFilter.cat !== 'all') {
+      list = list.filter(b => (b.category || b.cat || '').toLowerCase() === bkFilter.cat.toLowerCase());
+    }
+    // sort
+    if (bkFilter.sort === 'newest') list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    else if (bkFilter.sort === 'oldest') list.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+    else if (bkFilter.sort === 'amount-high') list.sort((a, b) => (b.total || 0) - (a.total || 0));
+    else if (bkFilter.sort === 'amount-low') list.sort((a, b) => (a.total || 0) - (b.total || 0));
+
+    const totalCount = list.length;
+    const totalPages = Math.max(1, Math.ceil(totalCount / bkFilter.limit));
+    if (bkFilter.page > totalPages) bkFilter.page = totalPages;
+    const startIdx = (bkFilter.page - 1) * bkFilter.limit;
+    const pageItems = list.slice(startIdx, startIdx + bkFilter.limit);
+
+    wrap.innerHTML = `
+      <div class="tbl-wrap">
+        <div class="tbl-tools" style="gap:10px">
+          <div class="input-group" style="flex:1;min-width:240px">
+            ${icon('search', 16)}
+            <input class="input" id="bk-search-input" value="${esc(bkFilter.q)}" placeholder="Search by Booking ID, customer, phone, service…">
+          </div>
+          <select class="select" id="bk-filter-status" style="width:auto;min-width:140px">
+            <option value="all" ${bkFilter.status === 'all' ? 'selected' : ''}>All Statuses</option>
+            <option value="pending" ${bkFilter.status === 'pending' ? 'selected' : ''}>Pending</option>
+            <option value="confirmed" ${bkFilter.status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
+            <option value="in-progress" ${bkFilter.status === 'in-progress' ? 'selected' : ''}>In-Progress (Active)</option>
+            <option value="completed" ${bkFilter.status === 'completed' ? 'selected' : ''}>Completed / Paid</option>
+            <option value="cancelled" ${bkFilter.status === 'cancelled' ? 'selected' : ''}>Cancelled / Rejected</option>
+          </select>
+          <select class="select" id="bk-filter-sort" style="width:auto;min-width:140px">
+            <option value="newest" ${bkFilter.sort === 'newest' ? 'selected' : ''}>Newest First</option>
+            <option value="oldest" ${bkFilter.sort === 'oldest' ? 'selected' : ''}>Oldest First</option>
+            <option value="amount-high" ${bkFilter.sort === 'amount-high' ? 'selected' : ''}>Amount: High to Low</option>
+            <option value="amount-low" ${bkFilter.sort === 'amount-low' ? 'selected' : ''}>Amount: Low to High</option>
+          </select>
+          <button class="btn btn-outline btn-sm" id="bk-refresh-btn" title="Refresh bookings list">${icon('refresh', 13)} Refresh</button>
+        </div>
+
+        <div class="tbl-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Booking ID</th>
+                <th>Customer</th>
+                <th>Service</th>
+                <th>Assigned Professional</th>
+                <th>Date & Time</th>
+                <th>Address</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pageItems.map(b => `
+                <tr>
+                  <td>
+                    <a href="javascript:void(0)" data-b-act="view" data-id="${b.id}" style="text-decoration:none" title="Click to view full order details">
+                      <b style="font-size:13.5px;color:var(--primary-600)">${b.id}</b>
+                    </a>
+                    <div class="xsmall muted">${timeAgo(b.createdAt)}</div>
+                  </td>
+                  <td>
+                    <div style="display:flex;gap:8px;align-items:center">
+                      ${avatar(b.customerName || b.customer || 'Customer', 30)}
+                      <div>
+                        <b style="font-size:13px">${esc(b.customerName || b.customer || 'Customer')}</b>
+                        <div class="xsmall muted">${esc(b.customerPhone || b.customerEmail || '—')}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <b style="font-size:13px">${esc(b.serviceName || b.serviceId)}</b>
+                    <div class="xsmall muted">${esc(b.packageName || b.pack || '')}</div>
+                  </td>
+                  <td>
+                    ${b.proName || b.proId ? `
+                      <span style="display:flex;align-items:center;gap:6px">
+                        ${icon('user', 13)}
+                        <b>${esc(b.proName || 'Pro #' + b.proId)}</b>
+                      </span>` : `<span class="badge badge-warn">Unassigned</span>`}
+                  </td>
+                  <td>
+                    <div>${safeDate(b.date)}</div>
+                    <div class="xsmall muted">${b.time || ''}</div>
+                  </td>
+                  <td>
+                    <div class="xsmall muted" style="max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(b.formattedAddress || b.address || '')}">
+                      ${esc(b.city ? `${b.city} — ${b.address || ''}` : (b.address || '—'))}
+                    </div>
+                  </td>
+                  <td>
+                    <b>${fmtMoney(b.total)}</b>
+                    <div class="xsmall">
+                      <span class="badge ${b.paymentStatus === 'paid' ? 'badge-success' : b.paymentStatus === 'refunded' ? 'badge-warn' : 'badge-neutral'}" style="padding:1px 6px;font-size:10.5px">
+                        ${b.paymentStatus || 'pending'}
+                      </span>
+                    </div>
+                  </td>
+                  <td>${renderStatusPill(b.status)}</td>
+                  <td>
+                    <div class="row-actions" style="display:flex;gap:6px;align-items:center;flex-wrap:nowrap">
+                      <button class="btn btn-outline btn-xs" data-b-act="view" data-id="${b.id}" style="padding:4px 8px;font-size:11.5px;font-weight:700;display:inline-flex;gap:4px;align-items:center" title="View order details">
+                        ${icon('eye', 13)} Details
+                      </button>
+                      <button class="mini-btn ok" data-b-act="assign" data-id="${b.id}" title="Assign professional">${icon('user', 14)}</button>
+                      <button class="mini-btn warn" data-b-act="status" data-id="${b.id}" title="Update status">${icon('refresh', 14)}</button>
+                      ${!['cancelled', 'rejected'].includes(b.status) ? `<button class="mini-btn no" data-b-act="cancel" data-id="${b.id}" title="Cancel booking">${icon('x', 14)}</button>` : ''}
+                    </div>
+                  </td>
+                </tr>
+              `).join('') || `<tr><td colspan="9"><div class="tbl-empty">${icon('calendar', 28)}<div style="margin-top:8px">No bookings found matching your search and filters</div></div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="tbl-tools" style="justify-content:space-between">
+          <span class="small muted">Showing ${totalCount ? startIdx + 1 : 0}–${Math.min(startIdx + bkFilter.limit, totalCount)} of ${totalCount} bookings</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="mini-btn" id="bk-prev-page" ${bkFilter.page <= 1 ? 'disabled' : ''}>${icon('arrowLeft', 13)}</button>
+            <span class="small muted" style="padding:0 6px">Page ${bkFilter.page} of ${totalPages}</span>
+            <button class="mini-btn" id="bk-next-page" ${bkFilter.page >= totalPages ? 'disabled' : ''}>${icon('arrowRight', 13)}</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // wire controls
+    const inp = U.$('#bk-search-input', wrap);
+    if (inp) {
+      inp.addEventListener('input', U.debounce(() => {
+        bkFilter.q = inp.value.trim();
+        bkFilter.page = 1;
+        renderBookingsView(wrap);
+      }, 250));
+    }
+    const stSel = U.$('#bk-filter-status', wrap);
+    if (stSel) {
+      stSel.addEventListener('change', () => {
+        bkFilter.status = stSel.value;
+        bkFilter.page = 1;
+        renderBookingsView(wrap);
+      });
+    }
+    const sortSel = U.$('#bk-filter-sort', wrap);
+    if (sortSel) {
+      sortSel.addEventListener('change', () => {
+        bkFilter.sort = sortSel.value;
+        renderBookingsView(wrap);
+      });
+    }
+    const refBtn = U.$('#bk-refresh-btn', wrap);
+    if (refBtn) {
+      refBtn.addEventListener('click', () => {
+        toast('Refreshing bookings from server…', 'info');
+        loadBookings();
+      });
+    }
+    const prevBtn = U.$('#bk-prev-page', wrap);
+    if (prevBtn) prevBtn.addEventListener('click', () => { if (bkFilter.page > 1) { bkFilter.page--; renderBookingsView(wrap); } });
+    const nextBtn = U.$('#bk-next-page', wrap);
+    if (nextBtn) nextBtn.addEventListener('click', () => { if (bkFilter.page < totalPages) { bkFilter.page++; renderBookingsView(wrap); } });
+
+    // delegate table row actions
+    wireBookingActions(wrap);
+  };
+
+  const wireBookingActions = (wrap) => {
+    if (wrap.dataset.actionsWired) return;
+    wrap.dataset.actionsWired = '1';
+    wrap.addEventListener('click', async e => {
+      const btn = e.target.closest('[data-b-act]');
+      if (!btn) return;
+      const act = btn.dataset.bAct;
+      const id = btn.dataset.id;
+      const b = bkData.find(x => String(x.id) === String(id)) || Store.bookingById(id);
+      if (!b) { toast('Booking not found', 'warn'); return; }
+
+      if (act === 'view') {
+        openBookingModal(b);
+      } else if (act === 'assign') {
+        openAssignProModal(b);
+      } else if (act === 'status') {
+        openStatusModal(b);
+      } else if (act === 'cancel') {
+        if (!confirm(`Are you sure you want to cancel booking ${b.id}? This will notify the customer.`)) return;
+        const res = await apiPost(`/admin/bookings/${b.id}/cancel`, { reason: 'Cancelled by Administrator' });
+        if (res && res.booking) {
+          b.status = 'cancelled';
+          Store.advanceBooking(b.id, 'cancelled');
+          toast(`Booking ${b.id} marked as cancelled ✅`, 'success');
+          loadBookings();
+        } else {
+          b.status = 'cancelled';
+          Store.advanceBooking(b.id, 'cancelled');
+          toast(`Booking ${b.id} cancelled (demo) ✅`, 'success');
+          loadBookings();
+        }
+      }
+    });
+  };
+
+  /* ---------- Booking Detail Modal ---------- */
+  const openBookingModal = async (b) => {
+    // Optionally fetch full record from API
+    let full = b;
+    const res = await apiGet(`/admin/bookings/${b.id}`);
+    if (res && res.booking) full = { ...b, ...res.booking, customer: res.customer, pro: res.pro };
+
+    const html = modalShell(`Booking Details — ${full.id}`, `
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;gap:10px;align-items:center">
+          <span style="font-size:18px;font-weight:800;color:var(--ink)">${esc(full.serviceName || full.serviceId)}</span>
+          ${renderStatusPill(full.status)}
+        </div>
+        <span class="small muted">Booked on ${safeDate(full.createdAt)}</span>
+      </div>
+
+      <div class="grid g2" style="grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card" style="padding:16px;background:var(--surface)">
+          <div class="small muted" style="margin-bottom:8px"><b>${icon('user', 14)} Customer Information</b></div>
+          <div class="sum-row"><span class="muted">Name</span><b>${esc(full.customerName || full.customer?.name || 'Customer')}</b></div>
+          <div class="sum-row"><span class="muted">Email</span><b>${esc(full.customerEmail || full.customer?.email || '—')}</b></div>
+          <div class="sum-row"><span class="muted">Phone</span><b>${esc(full.customerPhone || full.customer?.phone || '—')}</b></div>
+          <div class="sum-row"><span class="muted">User ID</span><b>${esc(String(full.userId || '—'))}</b></div>
+        </div>
+
+        <div class="card" style="padding:16px;background:var(--surface)">
+          <div class="small muted" style="margin-bottom:8px"><b>${icon('briefcase', 14)} Assigned Professional</b></div>
+          <div class="sum-row"><span class="muted">Professional</span><b>${esc(full.proName || full.pro?.name || 'Unassigned')}</b></div>
+          <div class="sum-row"><span class="muted">Pro Phone</span><b>${esc(full.pro?.phone || '—')}</b></div>
+          <div class="sum-row"><span class="muted">Rating</span><b>${full.pro?.rating ? full.pro.rating + ' ★' : '—'}</b></div>
+          <div class="sum-row"><span class="muted">Pro ID</span><b>${esc(String(full.proId || 'None'))}</b></div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:16px;background:var(--surface);margin-bottom:16px">
+        <div class="small muted" style="margin-bottom:8px"><b>${icon('calendar', 14)} Schedule & Address</b></div>
+        <div class="sum-row"><span class="muted">Date & Time</span><b>${safeDate(full.date)} at ${full.time || '—'}</b></div>
+        <div class="sum-row"><span class="muted">Full Address</span><span style="font-weight:600;max-width:320px;text-align:right">${esc(full.formattedAddress || full.address || '—')}</span></div>
+        <div class="sum-row"><span class="muted">City / State</span><b>${esc(full.city || '')} ${esc(full.state ? '• ' + full.state : '')} ${esc(full.pincode ? '(' + full.pincode + ')' : '')}</b></div>
+      </div>
+
+      <div class="card" style="padding:16px;background:var(--surface)">
+        <div class="small muted" style="margin-bottom:8px"><b>${icon('card', 14)} Payment & Total</b></div>
+        <div class="sum-row"><span class="muted">Total Amount</span><b style="font-size:16px;color:var(--primary-600)">${fmtMoney(full.total)}</b></div>
+        <div class="sum-row"><span class="muted">Payment Method</span><b>${esc(full.paymentMethod || 'wallet')}</b></div>
+        <div class="sum-row"><span class="muted">Payment Status</span><span class="badge ${full.paymentStatus === 'paid' ? 'badge-success' : full.paymentStatus === 'refunded' ? 'badge-warn' : 'badge-neutral'}">${full.paymentStatus || 'pending'}</span></div>
+        ${full.coupon ? `<div class="sum-row"><span class="muted">Coupon Applied</span><b>${esc(full.coupon)} (-${fmtMoney(full.discount)})</b></div>` : ''}
+        ${full.notes ? `<div class="sum-row"><span class="muted">Customer Notes</span><span class="small muted">${esc(full.notes)}</span></div>` : ''}
+      </div>`,
+      `<button class="btn btn-ghost" data-act="close-modal">Close</button>
+       <button class="btn btn-primary" id="m-btn-assign">${icon('user', 14)} Assign Pro</button>
+       <button class="btn btn-soft" id="m-btn-status">${icon('refresh', 14)} Update Status</button>
+       ${full.status === 'cancelled' && full.paymentStatus !== 'refunded' ? `<button class="btn btn-warn" id="m-btn-refund">${icon('wallet', 14)} Process Refund</button>` : ''}
+       ${!['cancelled', 'rejected'].includes(full.status) ? `<button class="btn btn-outline" style="color:var(--danger-600);border-color:var(--danger-100)" id="m-btn-cancel">${icon('x', 14)} Cancel Booking</button>` : ''}
+      `);
+
+    openModal(html);
+
+    U.$('#m-btn-assign')?.addEventListener('click', () => { closeModal(); openAssignProModal(full); });
+    U.$('#m-btn-status')?.addEventListener('click', () => { closeModal(); openStatusModal(full); });
+    U.$('#m-btn-cancel')?.addEventListener('click', async () => {
+      if (!confirm(`Cancel booking ${full.id}?`)) return;
+      await apiPost(`/admin/bookings/${full.id}/cancel`, { reason: 'Admin override' });
+      toast(`Booking ${full.id} cancelled ✅`, 'success');
+      closeModal();
+      loadBookings();
+    });
+    U.$('#m-btn-refund')?.addEventListener('click', async () => {
+      if (!confirm(`Process refund of ${fmtMoney(full.total)} for booking ${full.id}?`)) return;
+      const res = await apiPost(`/admin/bookings/${full.id}/refund`, { amount: full.total });
+      if (res && res.refunded) toast(`Refund of ${fmtMoney(full.total)} credited to customer wallet 💰`, 'success');
+      else toast('Refund processed ✅', 'success');
+      closeModal();
+      loadBookings();
+    });
+  };
+
+  /* ---------- Assign Pro Modal ---------- */
+  const openAssignProModal = async (b) => {
+    let pros = [];
+    const res = await apiGet('/admin/professionals');
+    if (res && res.professionals) pros = res.professionals;
+    else if (DATA.pros) pros = DATA.pros.map((p, i) => ({ id: i + 1, name: p.name, rating: p.rating, city: 'Mumbai', status: 'active' }));
+
+    openModal(modalShell(`Assign Professional — ${b.id}`, `
+      <p class="small muted" style="margin-bottom:14px">Select an active service professional or labourer to assign to this booking.</p>
+      <div class="field"><label class="label">Choose Professional</label>
+        <select class="select" id="assign-pro-select">
+          <option value="">-- Choose a professional --</option>
+          ${pros.map(p => `<option value="${p.id}" ${b.proId === p.id ? 'selected' : ''}>${esc(p.name)} • ${p.city || 'India'} (${p.rating || 4.8} ★) • ${p.status || 'active'}</option>`).join('')}
+        </select>
+      </div>`,
+      `<button class="btn btn-ghost" data-act="close-modal">Cancel</button>
+       <button class="btn btn-primary" id="assign-pro-save">${icon('check', 14)} Assign Pro</button>`));
+
+    U.$('#assign-pro-save')?.addEventListener('click', async () => {
+      const proId = U.$('#assign-pro-select')?.value;
+      if (!proId) { toast('Please choose a professional', 'warn'); return; }
+      const r = await apiPost(`/admin/bookings/${b.id}/assign`, { proId: Number(proId) });
+      if (r && r.booking) {
+        toast(`Professional assigned to ${b.id} ✅`, 'success');
+      } else {
+        const found = pros.find(x => String(x.id) === String(proId));
+        b.proId = Number(proId);
+        if (found) b.proName = found.name;
+        b.status = 'assigned';
+        Store.advanceBooking(b.id, 'assigned');
+        toast(`Professional assigned (demo) ✅`, 'success');
+      }
+      closeModal();
+      loadBookings();
+    });
+  };
+
+  /* ---------- Status Update Modal ---------- */
+  const openStatusModal = (b) => {
+    openModal(modalShell(`Update Status — ${b.id}`, `
+      <div class="sum-row"><span class="muted">Current Status</span><span>${renderStatusPill(b.status)}</span></div>
+      <div class="field" style="margin-top:14px"><label class="label">New Status</label>
+        <select class="select" id="new-bk-status">
+          ${VALID_STATUSES.map(s => `<option value="${s}" ${b.status === s ? 'selected' : ''}>${s.toUpperCase()}</option>`).join('')}
+        </select>
+      </div>
+      <div class="card glass" style="padding:12px;font-size:12px;margin-top:12px">
+        <b>${icon('info', 13)} Note:</b> Transitioning to <b>completed</b> credits 10% wallet cashback and 10 reward points to the customer. Transitioning to <b>cancelled</b> allows refund processing.
+      </div>`,
+      `<button class="btn btn-ghost" data-act="close-modal">Cancel</button>
+       <button class="btn btn-primary" id="save-bk-status">${icon('check', 14)} Save Status</button>`));
+
+    U.$('#save-bk-status')?.addEventListener('click', async () => {
+      const status = U.$('#new-bk-status')?.value;
+      if (!status) return;
+      const r = await apiPatch(`/admin/bookings/${b.id}`, { status });
+      if (r && r.booking) {
+        toast(`Booking ${b.id} status updated to ${status} ✅`, 'success');
+      } else {
+        b.status = status;
+        Store.advanceBooking(b.id, status);
+        toast(`Status updated (demo) ✅`, 'success');
+      }
+      closeModal();
+      loadBookings();
+    });
+  };
+
+  /* ---------- 3. Customers Management (Step 5) ---------- */
+  let usersList = [];
+  const loadCustomers = async () => {
+    const wrap = U.$('#admin-cust-wrap');
+    if (!wrap) return;
+    const res = await apiGet('/admin/users');
+    if (res && res.users) {
+      usersList = res.users.filter(u => u.role === 'customer' || !u.role);
+    } else {
+      usersList = [
+        { id: 9000, name: 'Demo Customer', email: 'demo@servehub.com', phone: '+91 98765 43210', walletBalance: 1250, rewardPoints: 340, membershipPlan: 'plus', createdAt: '2026-07-15T09:00:00.000Z' },
+        { id: 9001, name: 'Ananya Rao', email: 'ananya@example.com', phone: '+91 98200 11223', walletBalance: 450, rewardPoints: 120, membershipPlan: 'free', createdAt: '2026-07-20T10:00:00.000Z' },
+        { id: 9002, name: 'Mohit Agarwal', email: 'mohit@example.com', phone: '+91 99300 44556', walletBalance: 200, rewardPoints: 90, membershipPlan: 'free', createdAt: '2026-07-22T14:30:00.000Z' },
+      ];
+    }
+    renderCustomersView(wrap);
+  };
+
+  const renderCustomersView = (wrap) => {
+    let q = (U.$('#cust-search-inp', wrap)?.value || '').toLowerCase();
+    let list = usersList.filter(u =>
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.phone || '').toLowerCase().includes(q)
+    );
+
+    wrap.innerHTML = `
+      <div class="tbl-wrap">
+        <div class="tbl-tools" style="justify-content:space-between">
+          <div class="input-group" style="flex:1;max-width:320px">
+            ${icon('search', 16)}
+            <input class="input" id="cust-search-inp" value="${esc(q)}" placeholder="Search customers by name, email, phone…">
+          </div>
+          <span class="badge badge-neutral">${list.length} registered customers</span>
+        </div>
+        <div class="tbl-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Phone</th>
+                <th>Wallet & Points</th>
+                <th>Plan</th>
+                <th>Joined</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map(u => `
+                <tr>
+                  <td>
+                    <div style="display:flex;gap:10px;align-items:center">
+                      ${avatar(u.name || 'User', 34)}
+                      <div>
+                        <b style="font-size:13.5px">${esc(u.name || 'Customer')}</b>
+                        <div class="xsmall muted">${esc(u.email || '—')}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>${esc(u.phone || '—')}</td>
+                  <td><b>${fmtMoney(u.walletBalance || 0)}</b> <span class="xsmall muted">• ${u.rewardPoints || 0} pts</span></td>
+                  <td><span class="badge ${u.membershipPlan === 'plus' ? 'badge-primary' : u.membershipPlan === 'pro' ? 'badge-warn' : 'badge-neutral'}">${esc(u.membershipPlan || 'free').toUpperCase()}</span></td>
+                  <td><span class="small muted">${safeDate(u.createdAt)}</span></td>
+                  <td><span class="badge ${u.disabled ? 'badge-danger' : 'badge-success'}">${u.disabled ? 'Disabled' : 'Active'}</span></td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="mini-btn blue" data-cust-act="view" data-id="${u.id}" title="View profile & booking history">${icon('eye', 14)}</button>
+                      <button class="mini-btn ${u.disabled ? 'ok' : 'warn'}" data-cust-act="toggle" data-id="${u.id}" title="${u.disabled ? 'Activate account' : 'Deactivate account'}">${icon(u.disabled ? 'play' : 'pause', 14)}</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('') || `<tr><td colspan="7"><div class="tbl-empty">No customers found</div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    const inp = U.$('#cust-search-inp', wrap);
+    if (inp) inp.addEventListener('input', U.debounce(() => renderCustomersView(wrap), 250));
+
+    if (!wrap.dataset.custWired) {
+      wrap.dataset.custWired = '1';
+      wrap.addEventListener('click', async e => {
+        const btn = e.target.closest('[data-cust-act]');
+        if (!btn) return;
+        const act = btn.dataset.custAct;
+        const id = Number(btn.dataset.id);
+        const u = usersList.find(x => x.id === id);
+        if (!u) return;
+
+        if (act === 'view') {
+          openCustomerModal(u);
+        } else if (act === 'toggle') {
+          const nextDisabled = !u.disabled;
+          if (!confirm(`${nextDisabled ? 'Deactivate' : 'Activate'} user account for ${u.name}?`)) return;
+          const r = await apiPatch(`/admin/users/${u.id}/status`, { disabled: nextDisabled, active: !nextDisabled });
+          if (r && r.user) u.disabled = r.user.disabled;
+          else u.disabled = nextDisabled;
+          toast(`Account for ${u.name} ${nextDisabled ? 'deactivated' : 'activated'} ✅`, 'success');
+          renderCustomersView(wrap);
+        }
+      });
+    }
+  };
+
+  const openCustomerModal = async (u) => {
+    let bookings = [];
+    const res = await apiGet(`/admin/users/${u.id}`);
+    if (res && res.bookings) bookings = res.bookings;
+    else bookings = Store.state.bookings.filter(b => b.userId === u.id);
+
+    openModal(modalShell(`Customer — ${esc(u.name)}`, `
+      <div style="display:flex;gap:14px;align-items:center;margin-bottom:18px">
+        ${avatar(u.name, 48)}
+        <div>
+          <b style="font-size:16px">${esc(u.name)}</b>
+          <div class="xsmall muted">${esc(u.email)} • ${esc(u.phone || 'No phone')}</div>
+          <div style="margin-top:4px"><span class="badge ${u.membershipPlan === 'plus' ? 'badge-primary' : 'badge-neutral'}">${esc(u.membershipPlan || 'free').toUpperCase()} Plan</span></div>
+        </div>
+      </div>
+      <div class="grid g2" style="grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+        <div class="card" style="padding:14px;background:var(--surface)">
+          <div class="xsmall muted">Wallet Balance</div>
+          <b style="font-size:18px">${fmtMoney(u.walletBalance || 0)}</b>
+        </div>
+        <div class="card" style="padding:14px;background:var(--surface)">
+          <div class="xsmall muted">Reward Points</div>
+          <b style="font-size:18px">${u.rewardPoints || 0} pts</b>
+        </div>
+      </div>
+      <h4 style="font-size:14px;margin-bottom:8px">Booking History (${bookings.length})</h4>
+      <div class="tbl-scroll" style="max-height:220px;overflow-y:auto;border:1px solid var(--line-2);border-radius:10px">
+        <table>
+          <thead><tr><th>ID</th><th>Service</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>
+            ${bookings.map(b => `<tr><td><b>${b.id}</b></td><td>${esc(b.serviceName || b.serviceId)}</td><td>${safeDate(b.date)}</td><td><b>${fmtMoney(b.total)}</b></td><td>${renderStatusPill(b.status)}</td></tr>`).join('') || `<tr><td colspan="5"><div class="tbl-empty">No bookings on record</div></td></tr>`}
+          </tbody>
+        </table>
+      </div>`,
+      `<button class="btn btn-ghost" data-act="close-modal">Close</button>`));
+  };
+
+  /* ---------- 4. Professionals Management (Step 4) ---------- */
+  let prosList = [];
+  const loadPros = async () => {
+    const wrap = U.$('#admin-pros-wrap');
+    if (!wrap) return;
+    const res = await apiGet('/admin/professionals');
+    if (res && res.professionals) {
+      prosList = res.professionals;
+    } else {
+      prosList = [
+        { id: 1, name: 'Rahul Sharma', email: 'rahul@servehub.in', phone: '+91 98765 43210', services: ['s3', 's36'], city: 'Mumbai', experience: 8, rating: 4.9, bookingsCount: 1240, status: 'active', verified: true, bio: 'Certified HVAC & refrigeration technician.' },
+        { id: 2, name: 'Priya Menon', email: 'priya@servehub.in', phone: '+91 98111 22334', services: ['s1', 's2'], city: 'Mumbai', experience: 6, rating: 4.8, bookingsCount: 980, status: 'active', verified: true, bio: 'Deep cleaning specialist with 6+ years experience.' },
+        { id: 3, name: 'Arjun Patel', email: 'arjun@servehub.in', phone: '+91 98333 44556', services: ['s3'], city: 'Bengaluru', experience: 5, rating: 4.7, bookingsCount: 760, status: 'pending', verified: false, bio: 'Master electrician.' },
+      ];
+    }
+    renderProsView(wrap);
+  };
+
+  const renderProsView = (wrap) => {
+    const pending = prosList.filter(p => p.status === 'pending');
+    let q = (U.$('#pro-search-inp', wrap)?.value || '').toLowerCase();
+    let list = prosList.filter(p =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.city || '').toLowerCase().includes(q) ||
+      (p.email || '').toLowerCase().includes(q) ||
+      (p.phone || '').toLowerCase().includes(q)
+    );
+
+    wrap.innerHTML = `
+      ${pending.length ? `
+        <div class="card" style="padding:18px;margin-bottom:24px;border-color:var(--warn-100);background:var(--warn-50)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <b>${icon('timer', 16)} Professional applications awaiting review (${pending.length})</b>
+            <span class="badge badge-warn">Action needed</span>
+          </div>
+          ${pending.map(a => `
+            <div class="list-row" style="border-color:var(--warn-100);padding:10px 0">
+              ${avatar(a.name, 38)}
+              <div style="flex:1;min-width:0">
+                <b style="font-size:13.5px">${esc(a.name)}</b>
+                <div class="xsmall muted">${esc(a.city || 'India')} • ${a.experience || 5} yrs exp • ${esc(a.phone || '—')}</div>
+              </div>
+              <div class="row-actions">
+                <button class="btn btn-success btn-sm" data-pro-act="approve" data-id="${a.id}">${icon('check', 13)} Approve</button>
+                <button class="btn btn-danger btn-sm" data-pro-act="reject" data-id="${a.id}">${icon('x', 13)} Reject</button>
+                <button class="mini-btn blue" data-pro-act="view" data-id="${a.id}" title="Review application">${icon('eye', 14)}</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <div class="tbl-wrap">
+        <div class="tbl-tools" style="justify-content:space-between">
+          <div class="input-group" style="flex:1;max-width:320px">
+            ${icon('search', 16)}
+            <input class="input" id="pro-search-inp" value="${esc(q)}" placeholder="Search professionals by name, city, phone…">
+          </div>
+          <span class="badge badge-neutral">${list.length} registered professionals</span>
+        </div>
+
+        <div class="tbl-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Professional</th>
+                <th>City</th>
+                <th>Experience</th>
+                <th>Rating</th>
+                <th>Jobs Done</th>
+                <th>Verification</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map(p => `
+                <tr>
+                  <td>
+                    <div style="display:flex;gap:10px;align-items:center">
+                      ${avatar(p.name, 34)}
+                      <div>
+                        <b style="font-size:13.5px">${esc(p.name)}</b>
+                        <div class="xsmall muted">${esc(p.phone || p.email || '—')}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>${esc(p.city || '—')}</td>
+                  <td>${p.experience || 0} years</td>
+                  <td><b>${p.rating ? p.rating + ' ★' : 'New'}</b></td>
+                  <td>${p.bookingsCount ? p.bookingsCount.toLocaleString('en-IN') : 0}</td>
+                  <td><span class="badge ${p.verified ? 'badge-success' : 'badge-neutral'}">${p.verified ? 'Verified ✓' : 'Unverified'}</span></td>
+                  <td><span class="badge ${p.status === 'active' ? 'badge-success' : p.status === 'pending' ? 'badge-warn' : 'badge-danger'}">${esc(p.status || 'active').toUpperCase()}</span></td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="mini-btn blue" data-pro-act="view" data-id="${p.id}" title="View profile & jobs">${icon('eye', 14)}</button>
+                      <button class="mini-btn ${p.status === 'active' ? 'warn' : 'ok'}" data-pro-act="toggle" data-id="${p.id}" title="${p.status === 'active' ? 'Suspend' : 'Activate'}">${icon(p.status === 'active' ? 'pause' : 'play', 14)}</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('') || `<tr><td colspan="8"><div class="tbl-empty">No professionals found</div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    const inp = U.$('#pro-search-inp', wrap);
+    if (inp) inp.addEventListener('input', U.debounce(() => renderProsView(wrap), 250));
+
+    if (!wrap.dataset.prosWired) {
+      wrap.dataset.prosWired = '1';
+      wrap.addEventListener('click', async e => {
+        const btn = e.target.closest('[data-pro-act]');
+        if (!btn) return;
+        const act = btn.dataset.proAct;
+        const id = Number(btn.dataset.id);
+        const p = prosList.find(x => x.id === id);
+        if (!p) return;
+
+        if (act === 'view') {
+          openProModal(p);
+        } else if (act === 'approve') {
+          const r = await apiPatch(`/admin/professionals/${p.id}/approve`, { status: 'active' });
+          if (r && r.professional) { p.status = 'active'; p.verified = true; }
+          else { p.status = 'active'; p.verified = true; }
+          toast(`Professional ${p.name} approved & activated 🎉`, 'success');
+          renderProsView(wrap);
+        } else if (act === 'reject') {
+          if (!confirm(`Reject application for ${p.name}?`)) return;
+          const r = await apiPatch(`/admin/professionals/${p.id}/approve`, { status: 'reject' });
+          if (r && r.professional) { p.status = 'rejected'; p.verified = false; }
+          else { p.status = 'rejected'; p.verified = false; }
+          toast(`Professional ${p.name} rejected`, 'warn');
+          renderProsView(wrap);
+        } else if (act === 'toggle') {
+          const next = p.status === 'active' ? 'suspended' : 'active';
+          if (!confirm(`${next === 'active' ? 'Activate' : 'Suspend'} professional ${p.name}?`)) return;
+          const r = await apiPatch(`/admin/professionals/${p.id}`, { status: next });
+          if (r && r.professional) { p.status = next; p.verified = next === 'active'; }
+          else { p.status = next; p.verified = next === 'active'; }
+          toast(`Professional ${p.name} is now ${next} ✅`, 'success');
+          renderProsView(wrap);
+        }
+      });
+    }
+  };
+
+  const openProModal = async (p) => {
+    let bookings = [];
+    const res = await apiGet(`/admin/professionals/${p.id}`);
+    if (res && res.bookings) bookings = res.bookings;
+    else bookings = Store.state.bookings.filter(b => b.proId === p.id);
+
+    openModal(modalShell(`Professional — ${esc(p.name)}`, `
+      <div style="display:flex;gap:14px;align-items:center;margin-bottom:18px">
+        ${avatar(p.name, 48)}
+        <div>
+          <b style="font-size:16px">${esc(p.name)}</b>
+          <div class="xsmall muted">${esc(p.email || 'No email')} • ${esc(p.phone || 'No phone')}</div>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <span class="badge ${p.status === 'active' ? 'badge-success' : 'badge-warn'}">${esc(p.status).toUpperCase()}</span>
+            <span class="badge badge-neutral">${p.rating ? p.rating + ' ★' : 'Unrated'}</span>
+            <span class="badge badge-neutral">${p.experience || 0} years exp</span>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="padding:14px;background:var(--surface);margin-bottom:18px">
+        <div class="xsmall muted" style="margin-bottom:4px">Bio / About</div>
+        <p class="small" style="line-height:1.5">${esc(p.bio || 'Experienced home service professional verified on Servehub platform.')}</p>
+        <div class="sum-row" style="margin-top:10px"><span class="muted">City & Area</span><b>${esc(p.city || 'Mumbai')} ${p.area ? '• ' + esc(p.area) : ''}</b></div>
+        <div class="sum-row"><span class="muted">Total Jobs Completed</span><b>${p.bookingsCount || 0}</b></div>
+      </div>
+      <h4 style="font-size:14px;margin-bottom:8px">Assigned Bookings (${bookings.length})</h4>
+      <div class="tbl-scroll" style="max-height:220px;overflow-y:auto;border:1px solid var(--line-2);border-radius:10px">
+        <table>
+          <thead><tr><th>ID</th><th>Service</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>
+            ${bookings.map(b => `<tr><td><b>${b.id}</b></td><td>${esc(b.serviceName || b.serviceId)}</td><td>${safeDate(b.date)}</td><td><b>${fmtMoney(b.total)}</b></td><td>${renderStatusPill(b.status)}</td></tr>`).join('') || `<tr><td colspan="5"><div class="tbl-empty">No assigned bookings yet</div></td></tr>`}
+          </tbody>
+        </table>
+      </div>`,
+      `<button class="btn btn-ghost" data-act="close-modal">Close</button>`));
+  };
+
+  /* ---------- 5. Services Management (Step 6) ---------- */
+  let svcsList = [];
+  const loadServices = async () => {
+    const wrap = U.$('#admin-svcs-wrap');
+    if (!wrap) return;
+    const res = await apiGet('/admin/services');
+    if (res && res.services && res.services.length) {
+      svcsList = res.services;
+    } else {
+      svcsList = DATA.services.map(s => ({
+        id: s.id,
+        name: s.name,
+        category: DATA.catBySlug(s.cat)?.name || s.cat,
+        priceFrom: s.price,
+        duration: s.dur || '1 hr',
+        rating: s.rating,
+        bookingsCount: s.bookings || 0,
+        image: s.img || '✨',
+        active: true,
+        description: s.desc || '',
+      }));
+    }
+    renderServicesView(wrap);
+  };
+
+  const renderServicesView = (wrap) => {
+    let q = (U.$('#svc-search-inp', wrap)?.value || '').toLowerCase();
+    let cat = U.$('#svc-cat-filter', wrap)?.value || 'all';
+    let list = svcsList.filter(s => {
+      const matchQ = (s.name || '').toLowerCase().includes(q) || (s.category || '').toLowerCase().includes(q);
+      const matchCat = cat === 'all' || (s.category || '').toLowerCase() === cat.toLowerCase();
+      return matchQ && matchCat;
+    });
+
+    const categories = Array.from(new Set(svcsList.map(s => s.category).filter(Boolean)));
+
+    wrap.innerHTML = `
+      <div class="tbl-wrap">
+        <div class="tbl-tools" style="gap:10px">
+          <div class="input-group" style="flex:1;max-width:320px">
+            ${icon('search', 16)}
+            <input class="input" id="svc-search-inp" value="${esc(q)}" placeholder="Search services…">
+          </div>
+          <select class="select" id="svc-cat-filter" style="width:auto;min-width:160px">
+            <option value="all">All Categories</option>
+            ${categories.map(c => `<option value="${esc(c)}" ${cat.toLowerCase() === c.toLowerCase() ? 'selected' : ''}>${esc(c)}</option>`).join('')}
+          </select>
+          <button class="btn btn-primary btn-sm" id="svc-add-btn" style="margin-left:auto">${icon('plus', 13)} Add Service</button>
+        </div>
+
+        <div class="tbl-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Service Name</th>
+                <th>Category</th>
+                <th>Starting Price</th>
+                <th>Duration</th>
+                <th>Rating</th>
+                <th>Bookings</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${list.map(s => `
+                <tr>
+                  <td><b style="font-size:13.5px">${esc(s.name)}</b><div class="xsmall muted">${s.id}</div></td>
+                  <td>${esc(s.category)}</td>
+                  <td><b>${fmtMoney(s.priceFrom || s.price)}</b></td>
+                  <td>${esc(s.duration || '1 hr')}</td>
+                  <td>${s.rating || 4.8} ★</td>
+                  <td>${(s.bookingsCount || 0).toLocaleString('en-IN')}</td>
+                  <td><span class="badge ${s.active === false ? 'badge-neutral' : 'badge-success'}">${s.active === false ? 'Inactive' : 'Active'}</span></td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="mini-btn blue" data-svc-act="edit" data-id="${s.id}" title="Edit service">${icon('edit', 14)}</button>
+                      <button class="mini-btn ${s.active === false ? 'ok' : 'warn'}" data-svc-act="toggle" data-id="${s.id}" title="${s.active === false ? 'Activate' : 'Deactivate'}">${icon(s.active === false ? 'play' : 'pause', 14)}</button>
+                      <button class="mini-btn no" data-svc-act="del" data-id="${s.id}" title="Delete service">${icon('trash', 14)}</button>
+                    </div>
+                  </td>
+                </tr>
+              `).join('') || `<tr><td colspan="8"><div class="tbl-empty">No services found</div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    const inp = U.$('#svc-search-inp', wrap);
+    if (inp) inp.addEventListener('input', U.debounce(() => renderServicesView(wrap), 250));
+    const cSel = U.$('#svc-cat-filter', wrap);
+    if (cSel) cSel.addEventListener('change', () => renderServicesView(wrap));
+    const addBtn = U.$('#svc-add-btn', wrap);
+    if (addBtn) addBtn.addEventListener('click', openAddServiceModal);
+
+    if (!wrap.dataset.svcsWired) {
+      wrap.dataset.svcsWired = '1';
+      wrap.addEventListener('click', async e => {
+        const btn = e.target.closest('[data-svc-act]');
+        if (!btn) return;
+        const act = btn.dataset.svcAct;
+        const id = btn.dataset.id;
+        const s = svcsList.find(x => x.id === id);
+        if (!s) return;
+
+        if (act === 'edit') {
+          openEditServiceModal(s);
+        } else if (act === 'toggle') {
+          const nextActive = s.active === false;
+          const r = await apiPatch(`/admin/services/${s.id}`, { active: nextActive });
+          if (r && r.service) s.active = r.service.active;
+          else s.active = nextActive;
+          toast(`Service ${s.name} ${nextActive ? 'activated' : 'deactivated'} ✅`, 'success');
+          renderServicesView(wrap);
+        } else if (act === 'del') {
+          if (!confirm(`Are you sure you want to deactivate service "${s.name}"?`)) return;
+          await apiDelete(`/admin/services/${s.id}`);
+          s.active = false;
+          toast(`Service deactivated 🗑️`, 'info');
+          renderServicesView(wrap);
+        }
+      });
+    }
+  };
+
+  const openAddServiceModal = () => {
+    const cats = DATA.categories || [];
+    openModal(modalShell('Add New Service', `
+      <div class="field"><label class="label">Service Name</label><input class="input" id="new-svc-name" placeholder="e.g. Sofa Sanitization & Deep Clean"></div>
+      <div class="grid g2" style="grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label class="label">Category</label>
+          <select class="select" id="new-svc-cat">
+            ${cats.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label class="label">Base Price (₹)</label><input class="input" id="new-svc-price" type="number" placeholder="599"></div>
+      </div>
+      <div class="grid g2" style="grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label class="label">Duration</label><input class="input" id="new-svc-dur" placeholder="e.g. 1-2 hrs" value="1 hr"></div>
+        <div class="field"><label class="label">Icon / Emoji</label><input class="input" id="new-svc-icon" placeholder="✨" value="✨"></div>
+      </div>
+      <div class="field"><label class="label">Description</label><textarea class="textarea" id="new-svc-desc" placeholder="Service details and overview…"></textarea></div>
+      <div class="field"><label class="label">Included Items (comma-separated)</label><input class="input" id="new-svc-inc" placeholder="Dusting, Sanitization, Chemical Scrub"></div>`,
+      `<button class="btn btn-ghost" data-act="close-modal">Cancel</button>
+       <button class="btn btn-primary" id="new-svc-save">${icon('plus', 14)} Create Service</button>`));
+
+    U.$('#new-svc-save')?.addEventListener('click', async () => {
+      const name = (U.$('#new-svc-name')?.value || '').trim();
+      const category = U.$('#new-svc-cat')?.value || 'Other';
+      const priceFrom = Number(U.$('#new-svc-price')?.value || 0);
+      const duration = (U.$('#new-svc-dur')?.value || '1 hr').trim();
+      const image = (U.$('#new-svc-icon')?.value || '✨').trim();
+      const description = (U.$('#new-svc-desc')?.value || '').trim();
+      const incStr = U.$('#new-svc-inc')?.value || '';
+      const included = incStr.split(',').map(x => x.trim()).filter(Boolean);
+
+      if (!name) { toast('Please enter a service name', 'warn'); return; }
+      if (!priceFrom || priceFrom <= 0) { toast('Please enter a valid price', 'warn'); return; }
+
+      const body = { name, category, priceFrom, duration, image, description, included, active: true };
+      const res = await apiPost('/admin/services', body);
+      if (res && res.service) {
+        svcsList.unshift(res.service);
+        toast(`Service "${res.service.name}" created 🎉`, 'success');
+      } else {
+        const fake = { id: 's' + Date.now(), ...body, rating: 4.8, bookingsCount: 0 };
+        svcsList.unshift(fake);
+        toast(`Service "${name}" added (demo) 🎉`, 'success');
+      }
+      closeModal();
+      loadServices();
+    });
+  };
+
+  const openEditServiceModal = (s) => {
+    const cats = DATA.categories || [];
+    openModal(modalShell(`Edit Service — ${esc(s.name)}`, `
+      <div class="field"><label class="label">Service Name</label><input class="input" id="edit-svc-name" value="${esc(s.name)}"></div>
+      <div class="grid g2" style="grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label class="label">Category</label>
+          <select class="select" id="edit-svc-cat">
+            ${cats.map(c => `<option value="${esc(c.name)}" ${s.category === c.name ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label class="label">Base Price (₹)</label><input class="input" id="edit-svc-price" type="number" value="${s.priceFrom || s.price}"></div>
+      </div>
+      <div class="grid g2" style="grid-template-columns:1fr 1fr;gap:12px">
+        <div class="field"><label class="label">Duration</label><input class="input" id="edit-svc-dur" value="${esc(s.duration || '1 hr')}"></div>
+        <div class="field"><label class="label">Status</label>
+          <select class="select" id="edit-svc-active">
+            <option value="true" ${s.active !== false ? 'selected' : ''}>Active</option>
+            <option value="false" ${s.active === false ? 'selected' : ''}>Inactive</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label class="label">Description</label><textarea class="textarea" id="edit-svc-desc">${esc(s.description || '')}</textarea></div>`,
+      `<button class="btn btn-ghost" data-act="close-modal">Cancel</button>
+       <button class="btn btn-primary" id="edit-svc-save">${icon('check', 14)} Save Changes</button>`));
+
+    U.$('#edit-svc-save')?.addEventListener('click', async () => {
+      const patch = {
+        name: (U.$('#edit-svc-name')?.value || '').trim(),
+        category: U.$('#edit-svc-cat')?.value || s.category,
+        priceFrom: Number(U.$('#edit-svc-price')?.value || 0),
+        duration: (U.$('#edit-svc-dur')?.value || '1 hr').trim(),
+        active: U.$('#edit-svc-active')?.value === 'true',
+        description: (U.$('#edit-svc-desc')?.value || '').trim(),
+      };
+      const res = await apiPatch(`/admin/services/${s.id}`, patch);
+      if (res && res.service) Object.assign(s, res.service);
+      else Object.assign(s, patch);
+      toast('Service updated ✅', 'success');
+      closeModal();
+      loadServices();
+    });
+  };
+
+  /* ---------- 6. Payments & Refunds (Step 7) ---------- */
+  const loadPayments = async () => {
+    const wrap = U.$('#admin-payments-wrap');
+    if (!wrap) return;
+    const res = await apiGet('/admin/bookings');
+    const bookings = (res && res.bookings) || Store.state.bookings || [];
+    const totalRev = bookings.filter(b => b.paymentStatus === 'paid').reduce((a, b) => a + (b.total || 0), 0);
+    const methods = [
+      { name: 'UPI', count: bookings.filter(b => b.paymentMethod === 'upi').length },
+      { name: 'Card', count: bookings.filter(b => b.paymentMethod === 'card').length },
+      { name: 'Wallet', count: bookings.filter(b => b.paymentMethod === 'wallet').length },
+      { name: 'Cash', count: bookings.filter(b => b.paymentMethod === 'cash').length },
+    ];
+
+    wrap.innerHTML = `
+      <div class="stat-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+        ${methods.map(m => `
+          <div class="card stat-card">
+            <div class="st-top"><span class="st-ic" style="background:linear-gradient(135deg,#2563EB,#0EA5E9)">${icon('card', 18)}</span><span class="st-lbl">${m.name}</span></div>
+            <div class="st-val">${m.count}</div>
+            <div class="st-delta up">Active transactions</div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl-tools"><span class="small muted">Total settled volume: <b>${fmtMoney(totalRev)}</b></span></div>
+        <div class="tbl-scroll">
+          <table>
+            <thead><tr><th>Booking ID</th><th>Service</th><th>Customer</th><th>Method</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+            <tbody>
+              ${bookings.slice(0, 15).map(b => `
+                <tr>
+                  <td><b>${b.id}</b></td>
+                  <td>${esc(b.serviceName || b.serviceId)}</td>
+                  <td>${esc(b.customerName || b.customer || 'Customer')}</td>
+                  <td><span class="badge badge-neutral">${b.paymentMethod || 'wallet'}</span></td>
+                  <td><b>${fmtMoney(b.total)}</b></td>
+                  <td><span class="badge ${b.paymentStatus === 'paid' ? 'badge-success' : b.paymentStatus === 'refunded' ? 'badge-warn' : 'badge-neutral'}">${b.paymentStatus || 'pending'}</span></td>
+                  <td>${safeDate(b.date)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  };
+
+  const loadRefunds = async () => {
+    const wrap = U.$('#admin-refunds-wrap');
+    if (!wrap) return;
+    const res = await apiGet('/admin/bookings');
+    const bookings = (res && res.bookings) || Store.state.bookings || [];
+    const cancelled = bookings.filter(b => b.status === 'cancelled' || b.paymentStatus === 'refunded');
+
+    wrap.innerHTML = `
+      <div class="card" style="padding:18px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+        <div><b style="font-size:14px">Refund Management</b><div class="small muted">Processed refunds are credited directly to the customer wallet.</div></div>
+        <span class="badge badge-neutral">${cancelled.length} eligible/processed records</span>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl-scroll">
+          <table>
+            <thead><tr><th>Booking ID</th><th>Service</th><th>Customer</th><th>Amount</th><th>Refund Status</th><th>Actions</th></tr></thead>
+            <tbody>
+              ${cancelled.map(b => `
+                <tr>
+                  <td><b>${b.id}</b></td>
+                  <td>${esc(b.serviceName || b.serviceId)}</td>
+                  <td>${esc(b.customerName || b.customer || 'Customer')}</td>
+                  <td><b>${fmtMoney(b.total)}</b></td>
+                  <td><span class="badge ${b.paymentStatus === 'refunded' ? 'badge-success' : 'badge-warn'}">${b.paymentStatus === 'refunded' ? 'Refunded' : 'Refund Pending'}</span></td>
+                  <td>
+                    ${b.paymentStatus !== 'refunded' ? `
+                      <button class="btn btn-warn btn-sm" data-ref-act="refund" data-id="${b.id}">${icon('wallet', 13)} Process Refund</button>
+                    ` : `<span class="small muted">Completed ✓</span>`}
+                  </td>
+                </tr>
+              `).join('') || `<tr><td colspan="6"><div class="tbl-empty">No refund requests pending</div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+
+    if (!wrap.dataset.refWired) {
+      wrap.dataset.refWired = '1';
+      wrap.addEventListener('click', async e => {
+        const btn = e.target.closest('[data-ref-act]');
+        if (!btn) return;
+        const id = btn.dataset.id;
+        const b = cancelled.find(x => x.id === id);
+        if (!b) return;
+        if (!confirm(`Process refund of ${fmtMoney(b.total)} to customer wallet for booking ${b.id}?`)) return;
+        const res = await apiPost(`/admin/bookings/${b.id}/refund`, { amount: b.total });
+        if (res && res.refunded) toast(`Refund of ${fmtMoney(b.total)} credited to wallet 💰`, 'success');
+        else toast('Refund processed ✅', 'success');
+        loadRefunds();
+      });
+    }
+  };
+
+  /* ---------- 7. Notifications Broadcast (Step 7) ---------- */
+  const wireNotifications = () => {
+    const btn = U.$('#bc-send-btn');
+    if (!btn || btn.dataset.wired) return;
+    btn.dataset.wired = '1';
+    btn.addEventListener('click', async () => {
+      const audience = U.$('#bc-audience')?.value || 'all';
+      const title = (U.$('#bc-title')?.value || '').trim();
+      const body = (U.$('#bc-msg')?.value || '').trim();
+      if (!title || !body) { toast('Please provide both title and message', 'warn'); return; }
+
+      const res = await apiPost('/admin/broadcast', { title, body, audience });
+      if (res && res.ok) {
+        toast(`Broadcast delivered to ${res.count} users 📣`, 'success');
+      } else {
+        Store.addNotif('bell', title, body);
+        toast('Broadcast notification sent (demo) 📣', 'success');
+      }
+      U.$('#bc-title').value = '';
+      U.$('#bc-msg').value = '';
+    });
+  };
+
+  /* ================= LIVE-MANAGED TABS (Coupons, Gift Cards, Plans, Tickets, Reviews) ================= */
   const MANAGED = ['coupons', 'giftcards', 'plans', 'tickets', 'reviews'];
-  const mgrState = {}; // per-tab cache: { src: 'api'|'demo', items: [...] }
+  const mgrState = {};
 
   const mgrShell = name => `
     <div class="card" style="padding:8px">
       <div id="mgr-body" data-mgr="${name}" style="min-height:200px">
-        <div class="center" style="padding:60px 0">${icon('loader', 24)} <div class="small muted" style="margin-top:10px">Loading ${name}…</div></div>
+        <div class="center" style="padding:60px 0">${icon('refresh', 24)} <div class="small muted" style="margin-top:10px">Loading ${name}…</div></div>
       </div>
     </div>`;
 
   const srcBadge = (src, liveCount) => src === 'api'
-    ? `<span class="badge badge-success" style="margin-right:8px">${icon('server', 12)} Live · ${liveCount}</span>`
+    ? `<span class="badge badge-success" style="margin-right:8px">${icon('check', 12)} Live · ${liveCount}</span>`
     : `<span class="badge badge-neutral" style="margin-right:8px">${icon('zap', 12)} Demo data</span>`;
 
   const statusChip = (st, map = {}) => `<span class="badge ${map[st] || 'badge-neutral'}">${(st || '').replace(/-/g, ' ')}</span>`;
@@ -7823,7 +8991,7 @@ window.Admin = (() => {
     const render = MANAGED_RENDER[name];
     const prev = mgrState[name];
     let src = 'demo';
-    let items = prev && prev.src === 'demo' ? prev.items : demoItems(name); // keep demo edits across reloads
+    let items = prev && prev.src === 'demo' ? prev.items : demoItems(name);
     const live = await apiGet('/admin/' + name);
     if (live && (live.coupons || live.giftCards || live.plans || live.tickets || live.reviews)) {
       src = 'api';
@@ -7832,7 +9000,6 @@ window.Admin = (() => {
     mgrState[name] = { src, items };
     body.innerHTML = render(items, src);
     wireManagedActions(body, name);
-    wireTableSearch(body);
   };
 
   const demoItems = name => {
@@ -7843,34 +9010,28 @@ window.Admin = (() => {
     return [];
   };
 
-  /* -------- renderers per managed tab -------- */
   const MANAGED_RENDER = {
     coupons(items, src) {
-      const rows = items.map(c => ({
-        cells: [`<b style="letter-spacing:.04em">${esc(c.code)}</b>`, c.type === 'percent' ? `${c.value}% off${c.cap ? ' (max ' + money(c.cap) + ')' : ''}` : money(c.value), money(c.minAmount || 0), c.description || '—', c.validUntil || '—', `<span class="badge ${c.active === false ? 'badge-neutral' : 'badge-success'}">${c.active === false ? 'Inactive' : 'Active'}</span>`],
-        actions: [
-          `<button class="mini-btn blue" data-mgr-act="coupon-edit" data-code="${esc(c.code)}" title="Edit">${icon('edit', 14)}</button>`,
-          `<button class="mini-btn ${c.active === false ? 'ok' : 'warn'}" data-mgr-act="coupon-toggle" data-code="${esc(c.code)}" title="${c.active === false ? 'Activate' : 'Deactivate'}">${icon(c.active === false ? 'play' : 'pause', 14)}</button>`,
-          `<button class="mini-btn no" data-mgr-act="coupon-del" data-code="${esc(c.code)}" title="Delete">${icon('trash', 14)}</button>`,
-        ],
-      }));
-      return table(['Code', 'Discount', 'Min. order', 'Description', 'Valid till', 'Status'], rows, {
-        empty: 'No coupons yet — create one to promote your services',
-        right: `${srcBadge(src, items.length)}<button class="btn btn-primary btn-sm" data-mgr-act="coupon-new">${icon('plus', 13)} New coupon</button>`,
-      });
+      return `
+        <div class="tbl-wrap">
+          <div class="tbl-tools" style="justify-content:space-between">
+            <div>${srcBadge(src, items.length)}</div>
+            <button class="btn btn-primary btn-sm" data-mgr-act="coupon-new">${icon('plus', 13)} New coupon</button>
+          </div>
+          <div class="tbl-scroll"><table><thead><tr><th>Code</th><th>Discount</th><th>Min. order</th><th>Description</th><th>Valid till</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${items.map(c => `<tr><td><b style="letter-spacing:.04em">${esc(c.code)}</b></td><td>${c.type === 'percent' ? `${c.value}% off${c.cap ? ' (max ' + money(c.cap) + ')' : ''}` : money(c.value)}</td><td>${money(c.minAmount || 0)}</td><td>${c.description || '—'}</td><td>${c.validUntil || '—'}</td><td><span class="badge ${c.active === false ? 'badge-neutral' : 'badge-success'}">${c.active === false ? 'Inactive' : 'Active'}</span></td><td><div class="row-actions"><button class="mini-btn blue" data-mgr-act="coupon-edit" data-code="${esc(c.code)}" title="Edit">${icon('edit', 14)}</button><button class="mini-btn ${c.active === false ? 'ok' : 'warn'}" data-mgr-act="coupon-toggle" data-code="${esc(c.code)}" title="${c.active === false ? 'Activate' : 'Deactivate'}">${icon(c.active === false ? 'play' : 'pause', 14)}</button><button class="mini-btn no" data-mgr-act="coupon-del" data-code="${esc(c.code)}" title="Delete">${icon('trash', 14)}</button></div></td></tr>`).join('') || `<tr><td colspan="7"><div class="tbl-empty">No coupons yet</div></td></tr>`}</tbody></table></div>
+        </div>`;
     },
     giftcards(items, src) {
-      const rows = items.map(g => ({
-        cells: [`<b style="letter-spacing:.04em">${esc(g.code)}</b>`, money(g.value), money(g.balance || 0), g.expiresAt || '—', g.ownerUserId ? 'Redeemed' : 'Unclaimed', statusChip(g.status, { active: 'badge-success', redeemed: 'badge-primary', expired: 'badge-neutral' })],
-        actions: [
-          `<button class="mini-btn ${g.status === 'active' ? 'warn' : 'ok'}" data-mgr-act="gift-toggle" data-id="${g.id}" title="${g.status === 'active' ? 'Expire' : 'Re-activate'}">${icon(g.status === 'active' ? 'pause' : 'play', 14)}</button>`,
-          `<button class="mini-btn no" data-mgr-act="gift-del" data-id="${g.id}" title="Delete">${icon('trash', 14)}</button>`,
-        ],
-      }));
-      return table(['Code', 'Value', 'Balance', 'Expires', 'Owner', 'Status'], rows, {
-        empty: 'No gift cards yet — create one to sell to customers',
-        right: `${srcBadge(src, items.length)}<button class="btn btn-primary btn-sm" data-mgr-act="gift-new">${icon('plus', 13)} New gift card</button>`,
-      });
+      return `
+        <div class="tbl-wrap">
+          <div class="tbl-tools" style="justify-content:space-between">
+            <div>${srcBadge(src, items.length)}</div>
+            <button class="btn btn-primary btn-sm" data-mgr-act="gift-new">${icon('plus', 13)} New gift card</button>
+          </div>
+          <div class="tbl-scroll"><table><thead><tr><th>Code</th><th>Value</th><th>Balance</th><th>Expires</th><th>Owner</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${items.map(g => `<tr><td><b style="letter-spacing:.04em">${esc(g.code)}</b></td><td>${money(g.value)}</td><td>${money(g.balance || 0)}</td><td>${g.expiresAt || '—'}</td><td>${g.ownerUserId ? 'Redeemed' : 'Unclaimed'}</td><td>${statusChip(g.status, { active: 'badge-success', redeemed: 'badge-primary', expired: 'badge-neutral' })}</td><td><div class="row-actions"><button class="mini-btn ${g.status === 'active' ? 'warn' : 'ok'}" data-mgr-act="gift-toggle" data-id="${g.id}" title="${g.status === 'active' ? 'Expire' : 'Re-activate'}">${icon(g.status === 'active' ? 'pause' : 'play', 14)}</button><button class="mini-btn no" data-mgr-act="gift-del" data-id="${g.id}" title="Delete">${icon('trash', 14)}</button></div></td></tr>`).join('') || `<tr><td colspan="7"><div class="tbl-empty">No gift cards yet</div></td></tr>`}</tbody></table></div>
+        </div>`;
     },
     plans(items, src) {
       return `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">${srcBadge(src, items.length)}</div>
@@ -7883,37 +9044,27 @@ window.Admin = (() => {
         </div>`).join('') || '<div class="tbl-wrap"><div class="tbl-empty">No plans</div></div>'}</div>`;
     },
     tickets(items, src) {
-      const rows = items.map(t => ({
-        cells: [`<b style="font-size:13px">${esc(t.id)}</b>`, esc(t.customerName || 'Customer'), esc(t.subject), esc(t.category || 'other'), timeAgo(t.createdAt), statusChip(t.status, { open: 'badge-warn', 'in-progress': 'badge-primary', resolved: 'badge-success', closed: 'badge-neutral' })],
-        actions: [`<button class="mini-btn blue" data-mgr-act="ticket-view" data-id="${t.id}" title="Open thread">${icon('eye', 14)}</button>`],
-      }));
-      return table(['Ticket', 'Customer', 'Subject', 'Category', 'Age', 'Status'], rows, {
-        empty: 'No support tickets',
-        right: srcBadge(src, items.length),
-        search: false,
-      });
+      return `
+        <div class="tbl-wrap">
+          <div class="tbl-tools"><span class="small muted">${srcBadge(src, items.length)}</span></div>
+          <div class="tbl-scroll"><table><thead><tr><th>Ticket</th><th>Customer</th><th>Subject</th><th>Category</th><th>Age</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${items.map(t => `<tr><td><b>${esc(t.id)}</b></td><td>${esc(t.customerName || 'Customer')}</td><td>${esc(t.subject)}</td><td>${esc(t.category || 'other')}</td><td>${timeAgo(t.createdAt)}</td><td>${statusChip(t.status, { open: 'badge-warn', 'in-progress': 'badge-primary', resolved: 'badge-success', closed: 'badge-neutral' })}</td><td><button class="mini-btn blue" data-mgr-act="ticket-view" data-id="${t.id}" title="Open thread">${icon('eye', 14)}</button></td></tr>`).join('') || `<tr><td colspan="7"><div class="tbl-empty">No support tickets</div></td></tr>`}</tbody></table></div>
+        </div>`;
     },
     reviews(items, src) {
-      const rows = items.map(r => ({
-        cells: [`<div style="display:flex;gap:10px;align-items:center">${avatar(r.customerName || 'Customer', 32)}<b style="font-size:13px">${esc(r.customerName || 'Customer')}</b></div>`, esc(r.serviceName || '—'), stars(r.rating), `<span class="small muted" style="max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.text || '')}</span>`, statusChip(r.status, { published: 'badge-success', pending: 'badge-warn', hidden: 'badge-neutral' })],
-        actions: [
-          `<button class="mini-btn blue" data-mgr-act="review-view" data-id="${r.id}" title="View">${icon('eye', 14)}</button>`,
-          r.status !== 'published' ? `<button class="mini-btn ok" data-mgr-act="review-approve" data-id="${r.id}" title="Approve">${icon('check', 14)}</button>` : `<button class="mini-btn warn" data-mgr-act="review-hide" data-id="${r.id}" title="Hide">${icon('eyeOff', 14)}</button>`,
-          `<button class="mini-btn no" data-mgr-act="review-del" data-id="${r.id}" title="Remove">${icon('trash', 14)}</button>`,
-        ],
-      }));
-      return table(['Customer', 'Service', 'Rating', 'Review', 'Status'], rows, {
-        empty: 'No reviews yet',
-        right: `${srcBadge(src, items.length)}<span class="badge badge-neutral">${items.filter(r => r.status === 'pending').length} pending</span>`,
-        search: false,
-      });
+      return `
+        <div class="tbl-wrap">
+          <div class="tbl-tools" style="justify-content:space-between">
+            <div>${srcBadge(src, items.length)}</div>
+            <span class="badge badge-neutral">${items.filter(r => r.status === 'pending').length} pending moderation</span>
+          </div>
+          <div class="tbl-scroll"><table><thead><tr><th>Customer</th><th>Service</th><th>Rating</th><th>Review</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>${items.map(r => `<tr><td><div style="display:flex;gap:8px;align-items:center">${avatar(r.customerName || 'Customer', 28)}<b>${esc(r.customerName || 'Customer')}</b></div></td><td>${esc(r.serviceName || '—')}</td><td>${stars(r.rating)}</td><td><span class="small muted" style="max-width:220px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.text || '')}</span></td><td>${statusChip(r.status, { published: 'badge-success', pending: 'badge-warn', hidden: 'badge-neutral' })}</td><td><div class="row-actions"><button class="mini-btn blue" data-mgr-act="review-view" data-id="${r.id}" title="View">${icon('eye', 14)}</button>${r.status !== 'published' ? `<button class="mini-btn ok" data-mgr-act="review-approve" data-id="${r.id}" title="Approve">${icon('check', 14)}</button>` : `<button class="mini-btn warn" data-mgr-act="review-hide" data-id="${r.id}" title="Hide">${icon('eyeOff', 14)}</button>`}<button class="mini-btn no" data-mgr-act="review-del" data-id="${r.id}" title="Remove">${icon('trash', 14)}</button></div></td></tr>`).join('') || `<tr><td colspan="6"><div class="tbl-empty">No reviews yet</div></td></tr>`}</tbody></table></div>
+        </div>`;
     },
   };
 
-  /* -------- actions -------- */
   const wireManagedActions = (body, name) => {
-    // Only ever attach one delegated listener — reloads replace innerHTML but
-    // keep the same #mgr-body element, so a guard prevents listener buildup.
     if (body.dataset.mgrWired) return;
     body.dataset.mgrWired = '1';
     body.addEventListener('click', async e => {
@@ -7925,7 +9076,7 @@ window.Admin = (() => {
       const items = st.items;
 
       if (act === 'coupon-new') {
-        openModal(modalShell('New coupon', `
+        openModal(modalShell('New Coupon', `
           <div class="field"><label class="label">Code</label><input class="input" id="cp-code" placeholder="e.g. MONSOON25" style="text-transform:uppercase"></div>
           <div class="grid g2" style="grid-template-columns:1fr 1fr;gap:10px">
             <div class="field"><label class="label">Type</label><select class="select" id="cp-type"><option value="percent">Percent</option><option value="flat">Flat ₹</option></select></div>
@@ -7936,8 +9087,8 @@ window.Admin = (() => {
             <div class="field"><label class="label">Max discount (₹)</label><input class="input" id="cp-cap" type="number" placeholder="optional"></div>
           </div>
           <div class="field"><label class="label">Valid until</label><input class="input" id="cp-valid" type="date"></div>
-          <div class="field"><label class="label">Description</label><input class="input" id="cp-desc" placeholder="e.g. 20% off monsoon specials"></div>`, 
-          `<button class="btn btn-ghost" data-act="close-modal">Cancel</button><button class="btn btn-primary" id="cp-save">${icon('save', 14)} Create coupon</button>`));
+          <div class="field"><label class="label">Description</label><input class="input" id="cp-desc" placeholder="e.g. 20% off monsoon specials"></div>`,
+          `<button class="btn btn-ghost" data-act="close-modal">Cancel</button><button class="btn btn-primary" id="cp-save">${icon('check', 14)} Create coupon</button>`));
         U.$('#cp-save').addEventListener('click', async () => {
           const body2 = { code: U.$('#cp-code').value.trim(), type: U.$('#cp-type').value, value: Number(U.$('#cp-value').value || 0), minAmount: Number(U.$('#cp-min').value || 0), cap: U.$('#cp-cap').value ? Number(U.$('#cp-cap').value) : null, validUntil: U.$('#cp-valid').value, description: U.$('#cp-desc').value };
           if (!body2.code) { toast('Coupon code is required', 'warn'); return; }
@@ -7949,12 +9100,11 @@ window.Admin = (() => {
       if (act === 'coupon-edit') {
         const c = items.find(x => String(x.code) === String(btn.dataset.code));
         if (!c) return;
-        openModal(modalShell('Edit coupon — ' + esc(c.code), `
+        openModal(modalShell('Edit Coupon — ' + esc(c.code), `
           <div class="sum-row"><span class="muted">Discount</span><b>${c.type === 'percent' ? c.value + '% off' : money(c.value)}</b></div>
           <div class="sum-row"><span class="muted">Min. order</span><b>${money(c.minAmount || 0)}</b></div>
-          <div class="sum-row"><span class="muted">Valid till</span><b>${c.validUntil || '—'}</b></div>
-          <div class="field" style="margin-top:12px"><label class="label">Status</label><select class="select" id="cp-st"><option value="true" ${c.active !== false ? 'selected' : ''}>Active</option><option value="false" ${c.active === false ? 'selected' : ''}>Inactive</option></select></div>`, 
-          `<button class="btn btn-ghost" data-act="close-modal">Cancel</button><button class="btn btn-primary" id="cp-save">${icon('save', 14)} Save</button>`));
+          <div class="field" style="margin-top:12px"><label class="label">Status</label><select class="select" id="cp-st"><option value="true" ${c.active !== false ? 'selected' : ''}>Active</option><option value="false" ${c.active === false ? 'selected' : ''}>Inactive</option></select></div>`,
+          `<button class="btn btn-ghost" data-act="close-modal">Cancel</button><button class="btn btn-primary" id="cp-save">${icon('check', 14)} Save</button>`));
         U.$('#cp-save').addEventListener('click', async () => {
           const active = U.$('#cp-st').value === 'true';
           const r = await apiPatch('/admin/coupons/' + encodeURIComponent(c.code), { active });
@@ -7976,7 +9126,7 @@ window.Admin = (() => {
         toast('Coupon deleted 🗑️'); reload();
       }
       if (act === 'gift-new') {
-        openModal(modalShell('New gift card', `<div class="field"><label class="label">Value (₹)</label><div class="radio-pill">${[250, 500, 1000, 2000].map(a => `<label><input type="radio" name="gv" value="${a}" ${a === 500 ? 'checked' : ''}><span>${money(a)}</span></label>`).join('')}</div></div><div class="field"><label class="label">Expires</label><input class="input" id="gc-exp" type="date"></div>`, `<button class="btn btn-ghost" data-act="close-modal">Cancel</button><button class="btn btn-primary" id="gc-save">${icon('gift', 14)} Create</button>`));
+        openModal(modalShell('New Gift Card', `<div class="field"><label class="label">Value (₹)</label><div class="radio-pill">${[250, 500, 1000, 2000].map(a => `<label><input type="radio" name="gv" value="${a}" ${a === 500 ? 'checked' : ''}><span>${money(a)}</span></label>`).join('')}</div></div><div class="field"><label class="label">Expires</label><input class="input" id="gc-exp" type="date"></div>`, `<button class="btn btn-ghost" data-act="close-modal">Cancel</button><button class="btn btn-primary" id="gc-save">${icon('gift', 14)} Create</button>`));
         U.$('#gc-save').addEventListener('click', async () => {
           const value = Number(U.$('input[name="gv"]:checked')?.value || 500);
           const expiresAt = U.$('#gc-exp').value || '';
@@ -8002,11 +9152,11 @@ window.Admin = (() => {
       if (act === 'plan-edit') {
         const p = items.find(x => String(x.id) === String(btn.dataset.id));
         if (!p) return;
-        openModal(modalShell('Edit plan — ' + esc(p.name), `
+        openModal(modalShell('Edit Plan — ' + esc(p.name), `
           <div class="field"><label class="label">Monthly price (₹)</label><input class="input" id="pl-price" type="number" value="${p.price}"></div>
           <label style="display:flex;gap:8px;align-items:center;font-size:13px;font-weight:600;margin:10px 0"><input type="checkbox" id="pl-feat" ${p.featured ? 'checked' : ''}> Featured / flagship</label>
           <div class="field"><label class="label">Perks (one per line)</label><textarea class="textarea" id="pl-perks" rows="4">${esc((p.perks || []).join('\n'))}</textarea></div>`,
-          `<button class="btn btn-ghost" data-act="close-modal">Cancel</button><button class="btn btn-primary" id="pl-save">${icon('save', 14)} Save plan</button>`));
+          `<button class="btn btn-ghost" data-act="close-modal">Cancel</button><button class="btn btn-primary" id="pl-save">${icon('check', 14)} Save plan</button>`));
         U.$('#pl-save').addEventListener('click', async () => {
           const patch = { price: Number(U.$('#pl-price').value || 0), featured: U.$('#pl-feat').checked, perks: U.$('#pl-perks').value.split('\n').map(s => s.trim()).filter(Boolean) };
           const r = await apiPatch('/admin/plans/' + encodeURIComponent(p.id), patch);
@@ -8051,8 +9201,7 @@ window.Admin = (() => {
         if (!r) return;
         openModal(modalShell('Review by ' + esc(r.customerName || 'Customer'), `
           <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px">${avatar(r.customerName || 'Customer', 40)}<div><b style="font-size:14px">${esc(r.customerName || 'Customer')}</b><div style="margin-top:2px">${stars(r.rating)}</div></div><span class="badge badge-neutral" style="margin-left:auto">${esc(r.serviceName || '—')}</span></div>
-          <p class="small" style="line-height:1.65">${esc(r.text || 'No text')}</p>
-          <div style="display:flex;gap:8px;margin-top:14px">${r.verified ? '<span class="badge badge-success">Verified customer</span>' : '<span class="badge badge-neutral">Unverified</span>'}<span class="badge badge-neutral">${r.helpful || 0} helpful votes</span></div>`,
+          <p class="small" style="line-height:1.65">${esc(r.text || 'No text')}</p>`,
           `<button class="btn btn-ghost" data-act="close-modal">Close</button>${r.status !== 'published' ? `<button class="btn btn-success" data-mgr-act="review-approve" data-id="${r.id}" data-inmodal="1">${icon('check', 13)} Approve</button>` : ''}`));
         const appBtn = U.$('[data-mgr-act="review-approve"][data-inmodal]');
         if (appBtn) appBtn.addEventListener('click', async () => {
@@ -8085,15 +9234,28 @@ window.Admin = (() => {
     });
   };
 
+  /* ================= RENDER & ROUTING ================= */
   const render = (params) => {
-    const tab = params.tab || 'overview';
-    if (!Store.isLoggedIn() || Store.currentUser()?.role !== 'admin') { location.hash = '#/admin-login'; return { html: '', wire: null }; }
-    if (!tabs[tab]) return { html: layout('overview', tabs.overview()), wire: () => {} };
+    const tab = (params && params.tab) || 'bookings';
+    if (!Store.isLoggedIn() || Store.currentUser()?.role !== 'admin') {
+      location.hash = '#/admin-login';
+      return { html: '', wire: null };
+    }
+    if (!tabs[tab]) return { html: layout('bookings', tabs.bookings()), wire: () => loadBookings() };
     const html = layout(tab, tabs[tab]());
     const wire = () => {
-      wireTableSearch(document); U.observeReveals(); setTimeout(animateBars, 120);
-      if (tab === 'monitor') startMonitor();
-      if (MANAGED.includes(tab)) managedLoad(tab);
+      U.observeReveals();
+      setTimeout(animateBars, 120);
+      if (tab === 'overview') loadOverview();
+      else if (tab === 'bookings') loadBookings();
+      else if (tab === 'customers') loadCustomers();
+      else if (tab === 'professionals') loadPros();
+      else if (tab === 'services') loadServices();
+      else if (tab === 'payments') loadPayments();
+      else if (tab === 'refunds') loadRefunds();
+      else if (tab === 'notifications') wireNotifications();
+      else if (tab === 'monitor') startMonitor();
+      else if (MANAGED.includes(tab)) managedLoad(tab);
     };
     return { html, wire };
   };
@@ -8106,7 +9268,7 @@ window.Admin = (() => {
         const b = Store.bookingById(card.dataset.live);
         if (!b) return;
         const pill = U.$('[data-live-pill]', card);
-        if (pill) pill.innerHTML = statusPill(b.status);
+        if (pill) pill.innerHTML = renderStatusPill(b.status);
       });
       const cnt = U.$('#live-count');
       if (cnt) cnt.textContent = Store.state.bookings.filter(x => !['cancelled', 'paid', 'rated'].includes(x.status)).length;
@@ -8763,7 +9925,7 @@ window.Chatbot = (() => {
 
   const navBar = () => {
     const user = Store.currentUser();
-    const dash = user ? (user.role === 'admin' ? '#/admin/overview' : user.role === 'pro' ? '#/pro/overview' : '#/dashboard/overview') : '#/login';
+    const dash = user ? (user.role === 'admin' ? '#/admin/bookings' : user.role === 'pro' ? '#/pro/overview' : '#/dashboard/overview') : '#/login';
     const curLang = getActiveLang();
     return `
     <header class="navbar" id="navbar">
@@ -8773,6 +9935,7 @@ window.Chatbot = (() => {
           <a class="nav-link ${route === '' ? 'active' : ''}" href="#/">Home</a>
           <a class="nav-link" href="#/categories">Services ${icon('chevronDown', 14)}</a>
           <a class="nav-link" href="#/become-pro">For Professionals</a>
+          ${user?.role === 'admin' ? `<a class="nav-link" href="#/admin/bookings" style="color:var(--primary);font-weight:700">${icon('shield', 14)} Admin Orders</a>` : ''}
           <a class="nav-link" href="#/blog">Blog</a>
           <a class="nav-link" href="#/help">Support</a>
         </nav>
@@ -8793,6 +9956,7 @@ window.Chatbot = (() => {
         <a class="m-link active" href="#/">${icon('home', 17)} Home</a>
         <a class="m-link" href="#/categories">${icon('grid', 17)} All services</a>
         <a class="m-link" href="#/become-pro">${icon('briefcase', 17)} For professionals</a>
+        ${user?.role === 'admin' ? `<a class="m-link" href="#/admin/bookings" style="color:var(--primary);font-weight:700">${icon('shield', 17)} Admin Orders</a>` : ''}
         <a class="m-link" href="#/blog">${icon('book', 17)} Blog</a>
         <a class="m-link" href="#/help">${icon('headset', 17)} Support</a>
         <a class="m-link" href="#/about">${icon('info', 17)} About us</a>
@@ -8835,7 +9999,7 @@ window.Chatbot = (() => {
             ${['Cleaning', 'AC Repair', 'Electrician', 'Plumber'].map(c => { const cat = DATA.categories.find(x => x.name === c); return cat ? `<a href="#/category/${cat.slug}">${c}</a>` : ''; }).join('')}
           </div></div>
           <div><h4>Company</h4><div class="f-links">
-            ${[['about', 'About Us'], ['careers', 'Careers'], ['blog', 'Blog'], ['become-pro', 'Become a Professional']].map(l => `<a href="#/${l[0]}">${l[1]}</a>`).join('')}
+            ${[['about', 'About Us'], ['careers', 'Careers'], ['blog', 'Blog'], ['become-pro', 'Become a Professional'], ['admin-login', 'Admin Portal']].map(l => `<a href="#/${l[0]}">${l[1]}</a>`).join('')}
           </div></div>
           <div><h4>Support</h4><div class="f-links">
             ${[['help', 'Help Center'], ['faq', 'FAQs'], ['contact', 'Contact Us'], ['privacy', 'Privacy Policy'], ['terms', 'Terms & Conditions'], ['refund', 'Refund Policy']].map(l => `<a href="#/${l[0]}">${l[1]}</a>`).join('')}
@@ -9178,7 +10342,8 @@ window.Chatbot = (() => {
     { m: '^dashboard/([^/]+)$', name: 'dash-tab', lay: 'dash', render: p => Customer.render({ tab: p[0] }) },
     { m: '^pro$', name: 'pro', lay: 'dash', render: () => Pro.render({ tab: 'overview' }) },
     { m: '^pro/([^/]+)$', name: 'pro-tab', lay: 'dash', render: p => Pro.render({ tab: p[0] }) },
-    { m: '^admin$', name: 'admin', lay: 'dash', render: () => Admin.render({ tab: 'overview' }) },
+    { m: '^admin$', name: 'admin', lay: 'dash', render: () => Admin.render({ tab: 'bookings' }) },
+    { m: '^admin/orders$', name: 'admin-orders', lay: 'dash', render: () => Admin.render({ tab: 'bookings' }) },
     { m: '^admin/([^/]+)$', name: 'admin-tab', lay: 'dash', render: p => Admin.render({ tab: p[0] }) },
     { m: '^admin-login$', name: 'admin-login', lay: 'auth', render: () => ({ html: adminLogin(), wire: null }) },
   ];
@@ -9193,8 +10358,8 @@ window.Chatbot = (() => {
       </div>
       <div class="auth-form"><div class="auth-card">
         <h1>Admin login</h1><p class="sub">Restricted area — authorized personnel only.</p>
-        <div class="field"><label class="label">Admin email</label><div class="input-group">${icon('mail', 17)}<input class="input input-icon-r" placeholder="admin@servehub.in"></div></div>
-        <div class="field"><label class="label">Password</label><div class="input-group">${icon('lock', 17)}<input class="input input-icon-r" type="password" placeholder="••••••••"></div></div>
+        <div class="field"><label class="label">Admin email</label><div class="input-group">${icon('mail', 17)}<input class="input input-icon-r" id="ad-email" value="admin@servehub.com" placeholder="admin@servehub.com"></div></div>
+        <div class="field"><label class="label">Password</label><div class="input-group">${icon('lock', 17)}<input class="input input-icon-r" id="ad-pass" type="password" value="admin123" placeholder="••••••••"></div></div>
         <button class="btn btn-primary btn-lg btn-block" data-act="admin-login">${icon('shieldCheck', 16)} Sign in to admin</button>
         <p class="auth-alt"><a href="#/login">← Back to customer login</a></p>
       </div></div>
@@ -9219,7 +10384,7 @@ window.Chatbot = (() => {
     // If user is already logged in and opens the Login/Register page, redirect to Home or Dashboard
     if (r && ['login', 'register'].includes(r.name) && Store.isLoggedIn()) {
       const u = Store.currentUser();
-      const target = u?.role === 'admin' ? '#/admin/overview' : u?.role === 'pro' || u?.role === 'professional' ? '#/pro/overview' : '#/';
+      const target = u?.role === 'admin' ? '#/admin/bookings' : u?.role === 'pro' || u?.role === 'professional' ? '#/pro/overview' : '#/';
       navigateTo(afterLogin(target));
       return;
     }
@@ -9289,13 +10454,30 @@ window.Chatbot = (() => {
       el.setAttribute('title', isPw ? 'Hide password' : 'Show password');
     },
     'edit-phone': () => { location.hash = '#/register'; },
-    'oauth': el => { Store.login({ name: el.dataset.provider + ' User', role: 'customer', email: 'user@' + el.dataset.provider.toLowerCase() + '.com' }); Store.walletTx(150, 'signup bonus'); toast('Signed in with ' + el.dataset.provider + ' ✓'); location.hash = afterLogin('#/'); },
-    'demo-login': () => {
-      const role = (U.$('input[name="role"]:checked') || {}).value || 'customer';
-      if (role !== 'customer') { Auth.doLogin(role, 'demo@servehub.in', true); return; }
-      Store.login({ name: 'Priya Sharma', role: 'customer', email: 'priya@demo.com', phone: '+91 98765 43210' }); Store.addNotif('bell', 'Welcome back!', 'Demo session started. Everything is fully interactive.'); toast('Demo login successful — welcome, Priya! 🎉'); location.hash = afterLogin('#/');
+    'admin-login': async () => {
+      const email = (U.$('#ad-email')?.value || 'admin@servehub.com').trim();
+      const password = (U.$('#ad-pass')?.value || 'admin123').trim();
+      const apiBase = window.SH_API || window.SERVEHUB_API || 'http://localhost:4000/api';
+      try {
+        const r = await fetch(apiBase + '/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, role: 'admin' })
+        }).then(res => res.json()).catch(() => null);
+        if (r && r.token && r.user && r.user.role === 'admin') {
+          Store.login({ ...r.user, token: r.token });
+          toast(`Welcome back, ${r.user.name || 'Admin'}! 👋`, 'success');
+          location.hash = '#/admin/bookings';
+          return;
+        } else if (r && r.error) {
+          toast(r.error, 'warn');
+          return;
+        }
+      } catch (e) {}
+      Store.login({ name: 'Servehub Admin', email: 'admin@servehub.com', role: 'admin', token: 'demo-admin-token' });
+      toast('Signed in as Admin 🛡️', 'success');
+      location.hash = '#/admin/bookings';
     },
-    'admin-login': () => { Store.login({ name: 'Servehub Admin', role: 'admin' }); toast('Admin authenticated 🔐'); location.hash = '#/admin/overview'; },
     'logout': () => { closeModal(); Store.logout(); toast('Logged out successfully 👋'); location.hash = '#/login'; },
     'wish': el => { const on = Store.toggleWish(el.dataset.id); el.classList.toggle('on', on); el.style.color = on ? 'var(--danger)' : ''; toast(on ? 'Added to wishlist ❤️' : 'Removed from wishlist', on ? 'success' : 'info'); },
     'fav': el => { const on = Store.toggleFav(el.dataset.id); el.classList.toggle('on', on); el.style.color = on ? 'var(--danger)' : ''; toast(on ? 'Saved to favorites ⭐' : 'Removed from favorites', on ? 'success' : 'info'); },

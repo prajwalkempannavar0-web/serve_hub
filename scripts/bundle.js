@@ -6,7 +6,10 @@ const root = path.resolve(__dirname, '..');
 const fe = path.join(root, 'frontend');
 const pub = path.join(root, 'public');
 
-let html = fs.readFileSync(path.join(fe, 'index.html'), 'utf8');
+const templatePath = fs.existsSync(path.join(fe, 'index.template.html'))
+  ? path.join(fe, 'index.template.html')
+  : path.join(fe, 'index.html');
+let html = fs.readFileSync(templatePath, 'utf8');
 const css = fs.readFileSync(path.join(fe, 'css', 'styles.css'), 'utf8');
 const scripts = [
   'js/data.js', 'js/store.js', 'js/ui.js', 'js/components/locationPicker.js',
@@ -21,12 +24,13 @@ for (const s of scripts) {
 }
 
 fs.writeFileSync(path.join(fe, 'servehub.html'), html);
-console.log('frontend/servehub.html written:', (html.length / 1024).toFixed(0) + ' KB');
+fs.writeFileSync(path.join(fe, 'index.html'), html);
+console.log('frontend/servehub.html & index.html written:', (html.length / 1024).toFixed(0) + ' KB');
 
 // Ensure root public directory exists for Vercel deployment compatibility
 try {
   if (fs.cpSync) {
-    fs.cpSync(fe, pub, { recursive: true });
+    fs.cpSync(fe, pub, { recursive: true, filter: src => !src.includes('node_modules') });
   } else {
     fs.mkdirSync(pub, { recursive: true });
     fs.copyFileSync(path.join(fe, 'servehub.html'), path.join(pub, 'servehub.html'));

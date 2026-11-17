@@ -125,6 +125,17 @@ module.exports = {
     return u ? clone(u) : null;
   },
   async listUsers() { return [...load().users].reverse().map(clone); },
+  async updateUser(id, patch) {
+    const d = load();
+    const u = d.users.find(x => x.id === Number(id));
+    if (!u) return null;
+    const norm = {};
+    for (const [k, v] of Object.entries(patch)) norm[k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = v;
+    delete norm.passwordHash;
+    Object.assign(u, norm);
+    save();
+    return clone(u);
+  },
   async addPoints(userId, pts) { const u = load().users.find(x => x.id === userId); if (u) { u.rewardPoints += pts; save(); } },
   async addWallet(userId, amt) { const u = load().users.find(x => x.id === userId); if (u) { u.walletBalance += amt; save(); } },
   async updateUserPassword(email, passwordHash) {
@@ -205,6 +216,18 @@ module.exports = {
     p.status = status; p.verified = status === 'active'; save();
     return clone(p);
   },
+  async updatePro(id, patch) {
+    const d = load();
+    const p = d.pros.find(x => x.id === Number(id));
+    if (!p) return null;
+    const norm = {};
+    for (const [k, v] of Object.entries(patch)) norm[k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = v;
+    if (norm.status === 'active') p.verified = true;
+    else if (norm.status === 'rejected' || norm.status === 'suspended' || norm.status === 'inactive') p.verified = false;
+    Object.assign(p, norm);
+    save();
+    return clone(p);
+  },
   async listPendingPros() { return load().pros.filter(p => p.status === 'pending').map(clone); },
   async incrementProBookings(id) { const p = load().pros.find(x => x.id === id); if (p) { p.bookingsCount += 1; save(); } },
 
@@ -214,6 +237,53 @@ module.exports = {
     let list = load().services;
     if (category) list = list.filter(s => s.category === category);
     return list.slice().sort((a, b) => b.bookingsCount - a.bookingsCount).map(clone);
+  },
+  async listAllServices() {
+    return load().services.slice().sort((a, b) => (b.bookingsCount || 0) - (a.bookingsCount || 0)).map(clone);
+  },
+  async createService(o) {
+    const d = load();
+    const id = o.id || ('s' + Date.now());
+    const s = {
+      id,
+      name: o.name || 'New Service',
+      category: o.category || 'Other',
+      priceFrom: Number(o.priceFrom || o.price || 0),
+      duration: o.duration || '1 hr',
+      rating: Number(o.rating) || 4.8,
+      bookingsCount: 0,
+      image: o.image || '✨',
+      included: Array.isArray(o.included) ? o.included : (o.included ? String(o.included).split(',').map(x => x.trim()).filter(Boolean) : []),
+      description: o.description || '',
+      active: o.active !== false,
+      createdAt: now(),
+    };
+    d.services.unshift(s);
+    save();
+    return clone(s);
+  },
+  async updateService(id, patch) {
+    const d = load();
+    const s = d.services.find(x => x.id === id);
+    if (!s) return null;
+    const norm = {};
+    for (const [k, v] of Object.entries(patch)) norm[k.replace(/_([a-z])/g, (_, c) => c.toUpperCase())] = v;
+    if ('priceFrom' in norm) norm.priceFrom = Number(norm.priceFrom);
+    if ('price' in norm) norm.priceFrom = Number(norm.price);
+    if (typeof norm.included === 'string') norm.included = norm.included.split(',').map(x => x.trim()).filter(Boolean);
+    Object.assign(s, norm);
+    save();
+    return clone(s);
+  },
+  async deleteService(id) {
+    const d = load();
+    const s = d.services.find(x => x.id === id);
+    if (s) {
+      s.active = false;
+      save();
+      return true;
+    }
+    return false;
   },
   async findServiceById(id) { const s = load().services.find(x => x.id === id); return s ? clone(s) : null; },
   async findCoupon(code) {
@@ -412,6 +482,7 @@ module.exports = {
   },
   async findBookingById(id) { const b = load().bookings.find(x => x.id === id); return b ? clone(b) : null; },
   async listBookingsByUser(userId) { return load().bookings.filter(b => b.userId === userId).map(clone); },
+  async listBookingsByPro(proId) { return load().bookings.filter(b => b.proId === Number(proId)).map(clone); },
   async listBookings() { return load().bookings.map(clone); },
   async updateBooking(id, patch) {
     const b = load().bookings.find(x => x.id === id);
@@ -433,12 +504,23 @@ module.exports = {
     const d = load();
     const revenue = d.bookings.filter(b => b.paymentStatus === 'paid').reduce((a, b) => a + Number(b.total), 0);
     const activeBookings = d.bookings.filter(b => !['cancelled', 'rejected', 'rated', 'completed'].includes(b.status)).length;
+    const pendingBookings = d.bookings.filter(b => b.status === 'pending').length;
+    const confirmedBookings = d.bookings.filter(b => b.status === 'confirmed').length;
+    const inProgressBookings = d.bookings.filter(b => ['assigned', 'arriving', 'started'].includes(b.status)).length;
+    const completedBookings = d.bookings.filter(b => ['completed', 'paid', 'rated'].includes(b.status)).length;
+    const cancelledBookings = d.bookings.filter(b => ['cancelled', 'rejected'].includes(b.status)).length;
     return {
       totalBookings: d.bookings.length, revenue,
       customers: d.users.filter(u => u.role === 'customer').length,
       professionals: d.pros.length,
-      activeBookings, avgRating: '4.8',
-      recentBookings: d.bookings.slice(0, 8).map(clone),
+      activeBookings,
+      pendingBookings,
+      confirmedBookings,
+      inProgressBookings,
+      completedBookings,
+      cancelledBookings,
+      avgRating: '4.8',
+      recentBookings: d.bookings.slice(0, 10).map(clone),
     };
   },
 };

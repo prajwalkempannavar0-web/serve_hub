@@ -97,14 +97,6 @@ async function googleAuth(req, res) {
           error: `Google OAuth verification failed: ${err.message}`,
         });
       }
-    } else if (mockGoogleId && mockEmail) {
-      googleProfile = {
-        sub: mockGoogleId,
-        email: mockEmail,
-        email_verified: true,
-        name: mockName || mockEmail.split('@')[0],
-        picture: mockPicture || '',
-      };
     } else {
       return res.status(400).json({
         success: false,
@@ -196,8 +188,8 @@ async function login(req, res) {
       return res.status(400).json({ success: false, error: 'Password is required.' });
     }
 
-    // 4. Password must contain at least 8 characters
-    if (userPassword.length < 8) {
+    // 4. Password must contain at least 8 characters (exempting seeded demo account)
+    if (userPassword.length < 8 && userEmail !== 'demo@servehub.com') {
       return res.status(400).json({ success: false, error: 'Password must contain at least 8 characters.' });
     }
 

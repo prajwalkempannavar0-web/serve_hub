@@ -38,8 +38,9 @@ router.post('/', wrap(async (req, res) => {
   const service = await repo.findServiceById(serviceId);
   // Fetch the full user record so we can store their contact details on the booking
   const booker = await repo.findUserById(req.user.id);
+  const bookingId = (req.body.id && String(req.body.id).startsWith('SH')) ? req.body.id : ('SH' + Math.floor(100000 + Math.random() * 900000));
   const booking = await repo.createBooking({
-    id: 'SH' + Math.floor(100000 + Math.random() * 900000),
+    id: bookingId,
     userId: req.user.id,
     customerEmail: booker ? booker.email : (req.user.email || ''),
     customerName: booker ? (booker.name || booker.fullName || '') : (req.user.name || ''),
@@ -55,7 +56,9 @@ router.post('/', wrap(async (req, res) => {
     pincode: pincode || '',
     country: country || '',
     total: pricing.total, discount: pricing.discount, coupon: pricing.couponCode,
-    paymentMethod,
+    paymentMethod: paymentMethod || 'wallet',
+    paymentStatus: (paymentMethod === 'cash') ? 'pending' : 'paid',
+    notes: req.body.notes || '',
   });
   if (proId) await repo.incrementProBookings(Number(proId));
   res.status(201).json({ booking });

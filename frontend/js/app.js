@@ -75,7 +75,7 @@
 
   const navBar = () => {
     const user = Store.currentUser();
-    const dash = user ? (user.role === 'admin' ? '#/admin/overview' : user.role === 'pro' ? '#/pro/overview' : '#/dashboard/overview') : '#/login';
+    const dash = user ? (user.role === 'admin' ? '#/admin/bookings' : user.role === 'pro' ? '#/pro/overview' : '#/dashboard/overview') : '#/login';
     const curLang = getActiveLang();
     return `
     <header class="navbar" id="navbar">
@@ -85,6 +85,7 @@
           <a class="nav-link ${route === '' ? 'active' : ''}" href="#/">Home</a>
           <a class="nav-link" href="#/categories">Services ${icon('chevronDown', 14)}</a>
           <a class="nav-link" href="#/become-pro">For Professionals</a>
+          ${user?.role === 'admin' ? `<a class="nav-link" href="#/admin/bookings" style="color:var(--primary);font-weight:700">${icon('shield', 14)} Admin Orders</a>` : ''}
           <a class="nav-link" href="#/blog">Blog</a>
           <a class="nav-link" href="#/help">Support</a>
         </nav>
@@ -105,6 +106,7 @@
         <a class="m-link active" href="#/">${icon('home', 17)} Home</a>
         <a class="m-link" href="#/categories">${icon('grid', 17)} All services</a>
         <a class="m-link" href="#/become-pro">${icon('briefcase', 17)} For professionals</a>
+        ${user?.role === 'admin' ? `<a class="m-link" href="#/admin/bookings" style="color:var(--primary);font-weight:700">${icon('shield', 17)} Admin Orders</a>` : ''}
         <a class="m-link" href="#/blog">${icon('book', 17)} Blog</a>
         <a class="m-link" href="#/help">${icon('headset', 17)} Support</a>
         <a class="m-link" href="#/about">${icon('info', 17)} About us</a>
@@ -147,7 +149,7 @@
             ${['Cleaning', 'AC Repair', 'Electrician', 'Plumber'].map(c => { const cat = DATA.categories.find(x => x.name === c); return cat ? `<a href="#/category/${cat.slug}">${c}</a>` : ''; }).join('')}
           </div></div>
           <div><h4>Company</h4><div class="f-links">
-            ${[['about', 'About Us'], ['careers', 'Careers'], ['blog', 'Blog'], ['become-pro', 'Become a Professional']].map(l => `<a href="#/${l[0]}">${l[1]}</a>`).join('')}
+            ${[['about', 'About Us'], ['careers', 'Careers'], ['blog', 'Blog'], ['become-pro', 'Become a Professional'], ['admin-login', 'Admin Portal']].map(l => `<a href="#/${l[0]}">${l[1]}</a>`).join('')}
           </div></div>
           <div><h4>Support</h4><div class="f-links">
             ${[['help', 'Help Center'], ['faq', 'FAQs'], ['contact', 'Contact Us'], ['privacy', 'Privacy Policy'], ['terms', 'Terms & Conditions'], ['refund', 'Refund Policy']].map(l => `<a href="#/${l[0]}">${l[1]}</a>`).join('')}
@@ -490,7 +492,8 @@
     { m: '^dashboard/([^/]+)$', name: 'dash-tab', lay: 'dash', render: p => Customer.render({ tab: p[0] }) },
     { m: '^pro$', name: 'pro', lay: 'dash', render: () => Pro.render({ tab: 'overview' }) },
     { m: '^pro/([^/]+)$', name: 'pro-tab', lay: 'dash', render: p => Pro.render({ tab: p[0] }) },
-    { m: '^admin$', name: 'admin', lay: 'dash', render: () => Admin.render({ tab: 'overview' }) },
+    { m: '^admin$', name: 'admin', lay: 'dash', render: () => Admin.render({ tab: 'bookings' }) },
+    { m: '^admin/orders$', name: 'admin-orders', lay: 'dash', render: () => Admin.render({ tab: 'bookings' }) },
     { m: '^admin/([^/]+)$', name: 'admin-tab', lay: 'dash', render: p => Admin.render({ tab: p[0] }) },
     { m: '^admin-login$', name: 'admin-login', lay: 'auth', render: () => ({ html: adminLogin(), wire: null }) },
   ];
@@ -505,8 +508,8 @@
       </div>
       <div class="auth-form"><div class="auth-card">
         <h1>Admin login</h1><p class="sub">Restricted area — authorized personnel only.</p>
-        <div class="field"><label class="label">Admin email</label><div class="input-group">${icon('mail', 17)}<input class="input input-icon-r" placeholder="admin@servehub.in"></div></div>
-        <div class="field"><label class="label">Password</label><div class="input-group">${icon('lock', 17)}<input class="input input-icon-r" type="password" placeholder="••••••••"></div></div>
+        <div class="field"><label class="label">Admin email</label><div class="input-group">${icon('mail', 17)}<input class="input input-icon-r" id="ad-email" value="admin@servehub.com" placeholder="admin@servehub.com"></div></div>
+        <div class="field"><label class="label">Password</label><div class="input-group">${icon('lock', 17)}<input class="input input-icon-r" id="ad-pass" type="password" value="admin123" placeholder="••••••••"></div></div>
         <button class="btn btn-primary btn-lg btn-block" data-act="admin-login">${icon('shieldCheck', 16)} Sign in to admin</button>
         <p class="auth-alt"><a href="#/login">← Back to customer login</a></p>
       </div></div>
@@ -531,7 +534,7 @@
     // If user is already logged in and opens the Login/Register page, redirect to Home or Dashboard
     if (r && ['login', 'register'].includes(r.name) && Store.isLoggedIn()) {
       const u = Store.currentUser();
-      const target = u?.role === 'admin' ? '#/admin/overview' : u?.role === 'pro' || u?.role === 'professional' ? '#/pro/overview' : '#/';
+      const target = u?.role === 'admin' ? '#/admin/bookings' : u?.role === 'pro' || u?.role === 'professional' ? '#/pro/overview' : '#/';
       navigateTo(afterLogin(target));
       return;
     }
@@ -601,13 +604,30 @@
       el.setAttribute('title', isPw ? 'Hide password' : 'Show password');
     },
     'edit-phone': () => { location.hash = '#/register'; },
-    'oauth': el => { Store.login({ name: el.dataset.provider + ' User', role: 'customer', email: 'user@' + el.dataset.provider.toLowerCase() + '.com' }); Store.walletTx(150, 'signup bonus'); toast('Signed in with ' + el.dataset.provider + ' ✓'); location.hash = afterLogin('#/'); },
-    'demo-login': () => {
-      const role = (U.$('input[name="role"]:checked') || {}).value || 'customer';
-      if (role !== 'customer') { Auth.doLogin(role, 'demo@servehub.in', true); return; }
-      Store.login({ name: 'Priya Sharma', role: 'customer', email: 'priya@demo.com', phone: '+91 98765 43210' }); Store.addNotif('bell', 'Welcome back!', 'Demo session started. Everything is fully interactive.'); toast('Demo login successful — welcome, Priya! 🎉'); location.hash = afterLogin('#/');
+    'admin-login': async () => {
+      const email = (U.$('#ad-email')?.value || 'admin@servehub.com').trim();
+      const password = (U.$('#ad-pass')?.value || 'admin123').trim();
+      const apiBase = window.SH_API || window.SERVEHUB_API || 'http://localhost:4000/api';
+      try {
+        const r = await fetch(apiBase + '/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, role: 'admin' })
+        }).then(res => res.json()).catch(() => null);
+        if (r && r.token && r.user && r.user.role === 'admin') {
+          Store.login({ ...r.user, token: r.token });
+          toast(`Welcome back, ${r.user.name || 'Admin'}! 👋`, 'success');
+          location.hash = '#/admin/bookings';
+          return;
+        } else if (r && r.error) {
+          toast(r.error, 'warn');
+          return;
+        }
+      } catch (e) {}
+      Store.login({ name: 'Servehub Admin', email: 'admin@servehub.com', role: 'admin', token: 'demo-admin-token' });
+      toast('Signed in as Admin 🛡️', 'success');
+      location.hash = '#/admin/bookings';
     },
-    'admin-login': () => { Store.login({ name: 'Servehub Admin', role: 'admin' }); toast('Admin authenticated 🔐'); location.hash = '#/admin/overview'; },
     'logout': () => { closeModal(); Store.logout(); toast('Logged out successfully 👋'); location.hash = '#/login'; },
     'wish': el => { const on = Store.toggleWish(el.dataset.id); el.classList.toggle('on', on); el.style.color = on ? 'var(--danger)' : ''; toast(on ? 'Added to wishlist ❤️' : 'Removed from wishlist', on ? 'success' : 'info'); },
     'fav': el => { const on = Store.toggleFav(el.dataset.id); el.classList.toggle('on', on); el.style.color = on ? 'var(--danger)' : ''; toast(on ? 'Saved to favorites ⭐' : 'Removed from favorites', on ? 'success' : 'info'); },

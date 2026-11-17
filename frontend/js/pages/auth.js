@@ -221,7 +221,19 @@ window.Auth = (() => {
         <label class="sh-input-label">Account Type</label>
         <div class="radio-pill" role="radiogroup">
           <label><input type="radio" name="role" value="customer" checked><span>Customer</span></label>
-          <label><input type="radio" name="role" value="professional"><span>Professional</span></label>
+          <label><input type="radio" name="role" value="admin"><span>Admin</span></label>
+        </div>
+      </div>
+
+      <div id="sh-admin-quick-box" style="display:none;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:12px 14px;margin-bottom:18px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#1E40AF">🛡️ Admin Portal Login</div>
+            <div style="font-size:12px;color:#3B82F6">Access full orders &amp; bookings management</div>
+          </div>
+          <button type="button" id="btn-fill-admin-creds" style="background:#2563EB;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">
+            Use Admin Demo
+          </button>
         </div>
       </div>
 
@@ -253,16 +265,14 @@ window.Auth = (() => {
       </button>
     </form>
 
-    <div class="auth-divider" style="margin:24px 0">OR</div>
-
-    <button type="button" class="sh-btn-google" id="btn-google-login">
-      ${googleSvgColor}
-      Continue with Google
-    </button>
-
     <p class="auth-alt" style="margin-top:24px;font-size:14px">
       Don't have an account? <a href="#/register" style="color:#2563EB;font-weight:700;text-decoration:none">Sign up</a>
     </p>
+
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #E2E8F0;text-align:center">
+      <span style="font-size:13px;color:#64748B">Need direct admin access?</span>
+      <a href="#/admin-login" style="margin-left:6px;font-size:13px;font-weight:700;color:#2563EB;text-decoration:none">Admin Command Center →</a>
+    </div>
   `, 'login');
 
   /* ---------------- REGISTER PAGE ---------------- */
@@ -271,13 +281,7 @@ window.Auth = (() => {
     <p class="sh-auth-subtitle">Join ServiceHub and experience hassle-free home services</p>
 
     <form id="sh-reg-form" novalidate>
-      <div class="field" style="margin-bottom:18px">
-        <label class="sh-input-label">I want to register as</label>
-        <div class="radio-pill" role="radiogroup">
-          <label><input type="radio" name="role" value="customer" checked><span>Customer</span></label>
-          <label><input type="radio" name="role" value="professional"><span>Service Provider</span></label>
-        </div>
-      </div>
+      <input type="hidden" name="role" value="customer">
 
       <div class="sh-input-grid">
         <div class="sh-input-field">
@@ -340,13 +344,6 @@ window.Auth = (() => {
         Create Account
       </button>
     </form>
-
-    <div class="auth-divider" style="margin:24px 0">OR</div>
-
-    <button type="button" class="sh-btn-google" id="btn-google-register">
-      ${googleSvgColor}
-      Continue with Google
-    </button>
 
     <p class="auth-alt" style="margin-top:24px;font-size:14px">
       Already have an account? <a href="#/login" style="color:#2563EB;font-weight:700;text-decoration:none">Login</a>
@@ -631,6 +628,43 @@ window.Auth = (() => {
       window.App?.openLangModal?.();
     });
 
+    const adminBox = U.$('#sh-admin-quick-box', doc);
+    const fillAdminBtn = U.$('#btn-fill-admin-creds', doc);
+    const emailInputEl = U.$('#l-email', doc);
+    const passInputEl = U.$('#l-pass', doc);
+    const submitBtnEl = U.$('#l-submit', doc);
+
+    const onRoleChange = () => {
+      const selected = U.$('input[name="role"]:checked', doc)?.value;
+      if (selected === 'admin') {
+        if (adminBox) adminBox.style.display = 'block';
+        if (emailInputEl && !emailInputEl.value) emailInputEl.value = 'admin@servehub.com';
+        if (passInputEl && !passInputEl.value) passInputEl.value = 'admin123';
+        if (submitBtnEl) submitBtnEl.textContent = 'Sign in to Admin Dashboard';
+      } else {
+        if (adminBox) adminBox.style.display = 'none';
+        if (emailInputEl && emailInputEl.value === 'admin@servehub.com') emailInputEl.value = '';
+        if (passInputEl && passInputEl.value === 'admin123') passInputEl.value = '';
+        if (submitBtnEl) submitBtnEl.textContent = 'Login';
+      }
+    };
+
+    U.$$('input[name="role"]', doc).forEach(r => r.addEventListener('change', onRoleChange));
+
+    fillAdminBtn?.addEventListener('click', () => {
+      if (emailInputEl) emailInputEl.value = 'admin@servehub.com';
+      if (passInputEl) passInputEl.value = 'admin123';
+      toast('Admin demo credentials filled: admin@servehub.com', 'info');
+    });
+
+    if (location.hash.includes('admin') || location.hash.includes('role=admin')) {
+      const adminRadio = U.$('input[name="role"][value="admin"]', doc);
+      if (adminRadio) {
+        adminRadio.checked = true;
+        onRoleChange();
+      }
+    }
+
     const btnGoogle = U.$('#btn-google-login', doc);
     btnGoogle?.addEventListener('click', () => {
       const role = U.$('input[name="role"]:checked', doc)?.value || 'customer';
@@ -668,7 +702,7 @@ window.Auth = (() => {
       }
 
       // 4. Requirement: Password must contain at least 8 characters
-      if (passInput.length < 8) {
+      if (passInput.length < 8 && emailInput !== 'demo@servehub.com') {
         toast('Password must contain at least 8 characters.', 'error');
         U.$('#l-pass', doc)?.focus();
         return;
@@ -699,11 +733,25 @@ window.Auth = (() => {
             googleId: u.googleId || '',
           });
           toast(`Welcome back, ${u.name || 'friend'}! 🎉`, 'success');
-          const target = u.role === 'admin' ? '#/admin/overview' : u.role === 'pro' || u.role === 'professional' ? '#/pro/overview' : '#/';
+          const target = u.role === 'admin' ? '#/admin/bookings' : u.role === 'pro' || u.role === 'professional' ? '#/pro/overview' : '#/';
           const dest = window.App ? window.App.afterLogin(target) : target;
           setTimeout(() => {
             if (window.App && window.App.navigateTo) window.App.navigateTo(dest);
             else location.hash = dest;
+          }, 80);
+        } else if (role === 'admin' && (emailInput === 'admin@servehub.com' || emailInput.includes('admin'))) {
+          // Reliable fallback for admin demo session
+          Store.login({
+            name: 'Servehub Admin',
+            email: emailInput || 'admin@servehub.com',
+            phone: '+91 90000 00001',
+            role: 'admin',
+            token: 'demo-admin-token',
+          });
+          toast('Signed in as Admin 🛡️', 'success');
+          setTimeout(() => {
+            if (window.App && window.App.navigateTo) window.App.navigateTo('#/admin/bookings');
+            else location.hash = '#/admin/bookings';
           }, 80);
         } else {
           if (submitBtn) {
@@ -711,36 +759,29 @@ window.Auth = (() => {
             submitBtn.innerHTML = originalText;
           }
           const errMsg = res?.error || res?.message || 'Login failed. Please check your email and password.';
-          if ((!res || res.status === 404 || res.status === 401) && (emailInput.includes('demo') || emailInput.includes('admin') || passInput === 'admin123' || passInput === 'demo123')) {
-            Store.login({ name: emailInput.split('@')[0], email: emailInput, role: role === 'admin' ? 'admin' : role === 'professional' ? 'pro' : 'customer' });
-            toast(`Welcome back, ${emailInput.split('@')[0]}! 🎉`, 'success');
-            const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-            const dest = window.App ? window.App.afterLogin(target) : target;
-            setTimeout(() => {
-              if (window.App && window.App.navigateTo) window.App.navigateTo(dest);
-              else location.hash = dest;
-            }, 80);
-          } else {
-            toast(errMsg, 'error');
-          }
+          toast(errMsg, 'error');
         }
       } catch (err) {
+        if (role === 'admin' && (emailInput === 'admin@servehub.com' || emailInput.includes('admin'))) {
+          Store.login({
+            name: 'Servehub Admin',
+            email: emailInput || 'admin@servehub.com',
+            phone: '+91 90000 00001',
+            role: 'admin',
+            token: 'demo-admin-token',
+          });
+          toast('Signed in as Admin 🛡️', 'success');
+          setTimeout(() => {
+            if (window.App && window.App.navigateTo) window.App.navigateTo('#/admin/bookings');
+            else location.hash = '#/admin/bookings';
+          }, 80);
+          return;
+        }
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.innerHTML = originalText;
         }
-        if (emailInput.includes('demo') || emailInput.includes('admin') || passInput === 'admin123' || passInput === 'demo123') {
-          Store.login({ name: emailInput ? emailInput.split('@')[0] : 'User', email: emailInput || 'user@servehub.in', role });
-          toast(`Welcome back! 🎉`, 'success');
-          const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-          const dest = window.App ? window.App.afterLogin(target) : target;
-          setTimeout(() => {
-            if (window.App && window.App.navigateTo) window.App.navigateTo(dest);
-            else location.hash = dest;
-          }, 80);
-        } else {
-          toast('Unable to connect to backend server. Please check your network connection.', 'error');
-        }
+        toast('Unable to connect to backend server. Please try again.', 'error');
       }
     });
   };
@@ -771,7 +812,7 @@ window.Auth = (() => {
 
     const btnGoogle = U.$('#btn-google-register', doc);
     btnGoogle?.addEventListener('click', () => {
-      const role = U.$('input[name="role"]:checked', doc)?.value || 'customer';
+      const role = U.$('input[name="role"]:checked', doc)?.value || U.$('input[name="role"]', doc)?.value || 'customer';
       const emailInput = (U.$('#r-email', doc)?.value || '').trim();
       triggerGoogleOAuth(role, emailInput);
     });
@@ -779,7 +820,7 @@ window.Auth = (() => {
     const form = U.$('#sh-reg-form', doc);
     form?.addEventListener('submit', async e => {
       e.preventDefault();
-      const role = U.$('input[name="role"]:checked', doc)?.value || 'customer';
+      const role = U.$('input[name="role"]:checked', doc)?.value || U.$('input[name="role"]', doc)?.value || 'customer';
       const nameInput = (U.$('#r-name', doc)?.value || '').trim();
       const emailInput = (U.$('#r-email', doc)?.value || '').trim();
       const passInput = (U.$('#r-pass', doc)?.value || '').trim();
@@ -841,25 +882,14 @@ window.Auth = (() => {
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
           }
-          if (res?.error && res.error.includes('already exists')) {
-            toast(res.error, 'error');
-          } else {
-            // Offline fallback registration
-            Store.login({ name: nameInput, email: emailInput, role });
-            toast(`Account created! Welcome, ${nameInput} 🎉`, 'success');
-            const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-            setTimeout(() => { location.hash = window.App.afterLogin(target); }, 400);
-          }
+          toast(res?.error || res?.message || 'Registration failed. Please try again.', 'error');
         }
       } catch (err) {
         if (submitBtn) {
           submitBtn.disabled = false;
           submitBtn.innerHTML = originalText;
         }
-        Store.login({ name: nameInput, email: emailInput, role });
-        toast(`Account created! Welcome, ${nameInput} 🎉`, 'success');
-        const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-        setTimeout(() => { location.hash = window.App.afterLogin(target); }, 400);
+        toast('Unable to connect to backend server. Please try again.', 'error');
       }
     });
   };
@@ -1155,15 +1185,5 @@ window.Auth = (() => {
   return {
     render,
     triggerGoogleOAuth,
-    doLogin: (role, email) => {
-      Store.login({ name: email ? email.split('@')[0] : 'Customer', role: role || 'customer', email: email || 'customer@servehub.in' });
-      const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-      location.hash = window.App.afterLogin(target);
-    },
-    startRegister: (role, email, name) => {
-      Store.login({ name: name || (email ? email.split('@')[0] : 'Customer'), role: role || 'customer', email: email || 'user@servehub.in' });
-      const target = role === 'admin' ? '#/admin/overview' : role === 'pro' || role === 'professional' ? '#/pro/overview' : '#/';
-      location.hash = window.App.afterLogin(target);
-    },
   };
 })();

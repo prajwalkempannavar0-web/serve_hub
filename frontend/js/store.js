@@ -4,16 +4,15 @@
    Override anytime with window.SERVEHUB_API. */
 window.SH_API = (() => {
   if (window.SERVEHUB_API) return window.SERVEHUB_API;
+  const origin = (location && location.origin) || '';
+  if (origin.includes(':4000')) return '/api';
   const h = ((location && location.hostname) || '').toLowerCase();
-  // Empty hostname = page opened directly from disk (file://) — use localhost.
-  if (/^(|localhost|127\.0\.0\.1|0\.0\.0\.0|::1)$/.test(h)) return 'http://localhost:4000/api';
-  if (location.protocol === 'http:' || location.protocol === 'https:') {
-    if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) return `http://${h}:4000/api`;
-    return '/api';
-  }
-  // IPv6 hostnames need brackets: http://[fe80::1]:4000/api
-  return h.includes(':') ? `http://[${h}]:4000/api` : `http://${h}:4000/api`;
+  const protocol = (location && location.protocol) || 'http:';
+  if (!h) return 'http://localhost:4000/api';
+  if (h.includes(':')) return `${protocol}//[${h}]:4000/api`;
+  return `${protocol}//${h}:4000/api`;
 })();
+
 
 /* ============ PWA — installable app for phone + laptop ============
    Exposes window.SH_PWA: captures the browser's beforeinstallprompt,
